@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema principal do seu app -->
+    <style name="Theme.PingWifi" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Novo tema para a Activity que remove o flash branco -->
+    <style name="Theme.PingWifi.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
