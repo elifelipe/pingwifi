@@ -59,6 +59,10 @@ dependencies {
 
     implementation("androidx.navigation:navigation-compose:2.9.3")
 
+    implementation("androidx.compose.material:material:1.9.0")
+
+    implementation("androidx.compose.material:material-icons-extended")
+
     implementation("com.github.LottieFiles:dotlottie-android:0.9.2")
     // --- Networking / utilitários que você já usava ---
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

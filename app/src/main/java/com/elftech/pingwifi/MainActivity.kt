@@ -54,7 +54,7 @@ fun AppNavigation() {
 fun SplashScreen(navController: NavController) {
     // Este efeito executa o código dentro dele apenas uma vez.
     LaunchedEffect(key1 = true) {
-        // Aguarda 3 segundos (3000 milissegundos). Você pode ajustar este tempo.
+        // Aguarda 3 segundos.
         delay(3000L)
         // Navega para a tela principal e remove a splash da pilha para que o usuário não possa voltar.
         navController.navigate("main") {
@@ -71,7 +71,7 @@ fun SplashScreen(navController: NavController) {
             source = DotLottieSource.Url("https://lottie.host/aaa23968-7078-4261-a0ae-584240fccba3/JOOnBKAnbq.lottie"),
             autoplay = true,
             loop = true,
-            speed = 1f, // VELOCIDADE AJUSTADA AQUI
+            speed = 1f,
             useFrameInterpolation = false,
             playMode = Mode.FORWARD
         )

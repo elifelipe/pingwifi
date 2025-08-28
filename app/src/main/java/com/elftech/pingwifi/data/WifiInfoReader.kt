@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.elftech.pingwifi.R
 import com.elftech.pingwifi.model.WifiInfoData
 
 object WifiInfoReader {
@@ -32,7 +33,8 @@ object WifiInfoReader {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             val nc = cm.getNetworkCapabilities(cm.activeNetwork)
             val isWifi = nc?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-            if (!isWifi) return WifiInfoData(false, "Não conectado ao Wi-Fi", null, null, null, null)
+            // MODIFICADO: Usa recurso de string
+            if (!isWifi) return WifiInfoData(false, context.getString(R.string.no_wifi_connection), null, null, null, null)
 
             // 1) Permissão
             val fineGranted = ContextCompat.checkSelfPermission(
@@ -40,12 +42,14 @@ object WifiInfoReader {
             ) == PackageManager.PERMISSION_GRANTED
 
             if (!fineGranted) {
-                return WifiInfoData(true, "Permissão de localização necessária", null, null, null, null)
+                // MODIFICADO: Usa recurso de string
+                return WifiInfoData(true, context.getString(R.string.location_permission_needed), null, null, null, null)
             }
 
             // 2) Localização do aparelho habilitada
             if (!isLocationEnabled(context)) {
-                return WifiInfoData(true, "Ative a Localização do dispositivo para ler o SSID", null, null, null, null)
+                // MODIFICADO: Usa recurso de string
+                return WifiInfoData(true, context.getString(R.string.enable_location_for_ssid), null, null, null, null)
             }
 
             val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -60,9 +64,11 @@ object WifiInfoReader {
                 frequencyMhz = if (Build.VERSION.SDK_INT >= 21) info?.frequency else null
             )
         } catch (e: SecurityException) {
-            WifiInfoData(true, "Permissão negada", null, null, null, null)
+            // MODIFICADO: Usa recurso de string
+            WifiInfoData(true, context.getString(R.string.permission_denied), null, null, null, null)
         } catch (_: Exception) {
-            WifiInfoData(false, "Erro ao ler dados", null, null, null, null)
+            // MODIFICADO: Usa recurso de string
+            WifiInfoData(false, context.getString(R.string.error_reading_data), null, null, null, null)
         }
     }
 }

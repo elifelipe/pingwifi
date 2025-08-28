@@ -3,6 +3,7 @@ package com.elftech.pingwifi.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.elftech.pingwifi.R
 import com.elftech.pingwifi.data.SpeedTestRunner
 import com.elftech.pingwifi.data.TracerouteRunner
 import com.elftech.pingwifi.data.WifiInfoReader
@@ -82,9 +83,11 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
         if (_speed.value.status == RunStatus.RUNNING) return
 
         val server = serverToTest ?: _serverDetails.value ?: serverFinder.getAvailableServers().firstOrNull()
+        val context = getApplication<Application>()
 
         if (server == null) {
-            _speed.value = _speed.value.copy(status = RunStatus.ERROR, error = "Nenhum servidor de teste disponível.")
+            // MODIFICADO: Usa recurso de string
+            _speed.value = _speed.value.copy(status = RunStatus.ERROR, error = context.getString(R.string.no_test_server_available))
             return
         }
 
@@ -116,7 +119,8 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 _speed.value = _speed.value.copy(
                     status = RunStatus.ERROR,
-                    error = e.message ?: "Falha ao iniciar o teste"
+                    // MODIFICADO: Usa recurso de string
+                    error = e.message ?: context.getString(R.string.failed_to_start_test)
                 )
             }
         }
@@ -140,41 +144,12 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
  */
 class InternetSpeedTester {
     private val servers = listOf(
-        // O servidor do Google CDN é mantido pois sempre funciona.
         SpeedTestServer(
             name = "Google CDN",
             country = "Global",
             city = "N/A",
             downloadUrl = "https://dl.google.com/android/repository/android-ndk-r25c-linux.zip"
         )
-
-        /*
-         * ===================================================================================
-         * NOTA: Os servidores abaixo foram desativados para corrigir o erro de "resolve host".
-         * Para reativá-los, substitua as URLs de exemplo pelos IPs e caminhos
-         * REAIS dos seus arquivos de teste em cada servidor.
-         * Exemplo: "http://192.168.1.10/teste.zip"
-         * ===================================================================================
-
-        ,SpeedTestServer(
-            name = "Servidor Joinville",
-            country = "BR",
-            city = "Joinville",
-            downloadUrl = "http://IP.DO.SEU.SERVIDOR.JOINVILLE/arquivo_teste.zip"
-        ),
-        SpeedTestServer(
-            name = "Servidor Palmas",
-            country = "BR",
-            city = "Palmas",
-            downloadUrl = "http://IP.DO.SEU.SERVIDOR.PALMAS/arquivo_teste.zip"
-        ),
-        SpeedTestServer(
-            name = "Servidor Jaraguá",
-            country = "BR",
-            city = "Jaraguá do Sul",
-            downloadUrl = "http://IP.DO.SEU.SERVIDOR.JARAGUA/arquivo_teste.zip"
-        )
-        */
     )
 
     /**

@@ -1,3 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ping Wifi</string>
+    <string name="tab_speed">Velocidade</string>
+    <string name="tab_diagnosis">Diagnóstico</string>
+    <string name="status_testing">A testar velocidade%s</string>
+    <string name="status_done">Velocidade de Download</string>
+    <string name="status_error">Falha no Teste</string>
+    <string name="status_ready">Pronto para Testar</string>
+    <string name="button_test_again">Testar Novamente</string>
+    <string name="error_label">Erro: %s</string>
+    <string name="connection_details">Detalhes da Conexão</string>
+    <string name="detail_client">Cliente</string>
+    <string name="detail_location">Localização</string>
+    <string name="detail_server">Servidor</string>
+    <string name="detail_ssid">SSID</string>
+    <string name="detail_link_speed">Velocidade do Link</string>
+    <string name="fetching">A buscar…</string>
+    <string name="not_applicable">N/A</string>
+    <string name="no_wifi_connection">Não conectado ao Wi-Fi</string>
+    <string name="location_permission_needed">Permissão de localização necessária</string>
+    <string name="enable_location_for_ssid">Ative a Localização do dispositivo para ler o SSID</string>
+    <string name="permission_denied">Permissão negada</string>
+    <string name="error_reading_data">Erro ao ler dados</string>
+    <string name="traceroute_title">Traceroute</string>
+    <string name="traceroute_host_label">Host ou IP</string>
+    <string name="traceroute_start_button">Iniciar Traceroute</string>
+    <string name="no_test_server_available">Nenhum servidor de teste disponível.</string>
+    <string name="failed_to_start_test">Falha ao iniciar o teste</string>
+    <string name="traceroute_failed">Traceroute falhou (lib nativa ausente e fallback indisponível).</string>
 </resources>
