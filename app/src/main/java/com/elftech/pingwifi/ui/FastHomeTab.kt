@@ -14,10 +14,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.elftech.pingwifi.data.model.ClientInfo
+import com.elftech.pingwifi.data.model.SpeedTestServer
 import com.elftech.pingwifi.model.RunStatus
 import com.elftech.pingwifi.model.WifiInfoData
-import com.elftech.pingwifi.viewmodel.ClientInfo
-import com.elftech.pingwifi.viewmodel.SpeedTestServer
 import kotlinx.coroutines.delay
 
 @Composable

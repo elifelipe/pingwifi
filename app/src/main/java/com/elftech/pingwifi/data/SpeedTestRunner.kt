@@ -1,10 +1,6 @@
 package com.elftech.pingwifi.data
 
 import android.os.SystemClock
-import fr.bmartel.speedtest.SpeedTestReport
-import fr.bmartel.speedtest.SpeedTestSocket
-import fr.bmartel.speedtest.inter.ISpeedTestListener
-import fr.bmartel.speedtest.model.SpeedTestError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,10 +14,19 @@ import okhttp3.Request
 import okio.Buffer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
+/**
+ * SpeedTestRunner totalmente em Kotlin, sem dependências nativas.
+ * Compatível com páginas de memória de 16KB.
+ */
 class SpeedTestRunner(private val scope: CoroutineScope) {
     private var activeJob: Job? = null
-    private var activeSocket: SpeedTestSocket? = null
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     fun startDownload(
         url: String,
@@ -29,146 +34,172 @@ class SpeedTestRunner(private val scope: CoroutineScope) {
         onDone: (Double) -> Unit,
         onError: (String) -> Unit,
         reportIntervalMs: Int = 250,
-        socketTimeoutMs: Int = 15000,
-        watchdogMs: Long = 4000L       // se nada acontecer em 4s, fazemos fallback
+        testDurationMs: Long = 10000L // Teste por 10 segundos
     ) {
-        // encerra qualquer teste anterior
+        // Cancela qualquer teste anterior
         activeJob?.cancel()
-        activeSocket?.forceStopTask()
 
         activeJob = scope.launch(Dispatchers.IO) {
-            var hadProgress = false
-            val startT = SystemClock.elapsedRealtime()
-
-            val speedTestSocket = SpeedTestSocket().apply {
-                setSocketTimeout(socketTimeoutMs)
-            }
-            activeSocket = speedTestSocket
-
-            var lastPct = -1            // degrau de 1% (Int)
-            var lastEmit = 0L
-
-            // ---- watchdog: se não houver progresso em N segundos, cai para OkHttp
-            val watchdog = launch {
-                while (isActive) {
-                    delay(250)
-                    val elapsed = SystemClock.elapsedRealtime() - startT
-                    if (!hadProgress && elapsed >= watchdogMs) {
-                        // nada aconteceu: cancela socket e usa fallback
-                        try { speedTestSocket.forceStopTask() } catch (_: Throwable) {}
-                        cancel() // encerra watchdog
-                        runOkHttpFallback(url, onProgress, onDone, onError)
-                        return@launch
-                    }
-                }
-            }
-
             try {
-                speedTestSocket.addSpeedTestListener(object : ISpeedTestListener {
-                    override fun onCompletion(report: SpeedTestReport) {
-                        hadProgress = true
-                        val mbps = report.transferRateBit.toDouble() / 1_000_000.0
-                        scope.launch(Dispatchers.Main) { onDone(mbps) }
-                        watchdog.cancel()
-                    }
-
-                    override fun onProgress(percent: Float, report: SpeedTestReport) {
-                        if (!isActive) return
-                        hadProgress = true
-                        val now = SystemClock.elapsedRealtime()
-                        val pctStep = percent.toInt() // 0..100
-                        if (pctStep != lastPct && now - lastEmit >= 60L) {
-                            lastPct = pctStep
-                            lastEmit = now
-                            val mbps = report.transferRateBit.toDouble() / 1_000_000.0
-                            scope.launch(Dispatchers.Main) { onProgress(percent, mbps) }
-                        }
-                    }
-
-                    override fun onError(err: SpeedTestError, msg: String) {
-                        // erro da lib → tenta fallback HTTPS
-                        if (!isActive) return
-                        watchdog.cancel()
-
-                        // CORREÇÃO: Lança uma nova corrotina para chamar a função suspensa
-                        scope.launch(Dispatchers.IO) {
-                            runOkHttpFallback(url, onProgress, onDone, onError)
-                        }
-                    }
-                })
-
-                // inicia com intervalo de relatório menor (menos jank)
-                speedTestSocket.startDownload(url, reportIntervalMs)
-
-            } catch (e: Throwable) {
-                watchdog.cancel()
-                // Falha ao iniciar → fallback direto
-                runOkHttpFallback(url, onProgress, onDone, onError)
+                runSpeedTest(
+                    url = url,
+                    onProgress = onProgress,
+                    onDone = onDone,
+                    onError = onError,
+                    reportIntervalMs = reportIntervalMs,
+                    testDurationMs = testDurationMs
+                )
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Erro desconhecido")
+                }
             }
         }
     }
 
-    private suspend fun runOkHttpFallback(
+    private suspend fun runSpeedTest(
         url: String,
         onProgress: (Float, Double) -> Unit,
         onDone: (Double) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        reportIntervalMs: Int,
+        testDurationMs: Long
     ) = withContext(Dispatchers.IO) {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Cache-Control", "no-cache")
             .build()
 
-        val req = Request.Builder().url(url).build()
-
         try {
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-                val body = resp.body ?: throw IOException("Resposta sem corpo")
-                val totalLen = body.contentLength() // pode ser -1
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("HTTP ${response.code}: ${response.message}")
+                }
+
+                val body = response.body ?: throw IOException("Resposta sem corpo")
+                val contentLength = body.contentLength()
                 val source = body.source()
-                val buf = Buffer()
 
-                var totalBytes = 0L
-                val t0 = SystemClock.elapsedRealtime()
-                var lastEmit = t0
+                // Buffer otimizado para páginas de 16KB
+                val bufferSize = 16 * 1024 // 16KB alinhado
+                val buffer = Buffer()
 
-                while (true) {
-                    val read = source.read(buf, 64 * 1024)
-                    if (read == -1L) break
-                    totalBytes += read
-                    buf.clear()
+                var totalBytesRead = 0L
+                val startTime = SystemClock.elapsedRealtime()
+                var lastReportTime = startTime
+                val endTime = startTime + testDurationMs
 
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - lastEmit >= 250L) {
-                        lastEmit = now
-                        val secs = (now - t0) / 1000.0
-                        val mbps = (totalBytes * 8) / 1_000_000.0 / secs.coerceAtLeast(0.001)
-                        if (totalLen > 0) {
-                            val pct = (totalBytes * 100f / totalLen).coerceIn(0f, 100f)
-                            withContext(Dispatchers.Main) { onProgress(pct, mbps) }
+                // Array para cálculo de média móvel de velocidade
+                val speedSamples = mutableListOf<Pair<Long, Long>>() // (bytes, time)
+
+                while (isActive && SystemClock.elapsedRealtime() < endTime) {
+                    val bytesRead = source.read(buffer, bufferSize.toLong())
+                    if (bytesRead == -1L) break
+
+                    totalBytesRead += bytesRead
+                    buffer.clear()
+
+                    val currentTime = SystemClock.elapsedRealtime()
+                    speedSamples.add(totalBytesRead to currentTime)
+
+                    // Remove amostras antigas (mantém apenas últimos 2 segundos)
+                    speedSamples.removeAll { (currentTime - it.second) > 2000 }
+
+                    // Relatório de progresso
+                    if (currentTime - lastReportTime >= reportIntervalMs) {
+                        lastReportTime = currentTime
+
+                        // Calcula velocidade média dos últimos 2 segundos
+                        val mbps = calculateSpeed(speedSamples, startTime)
+
+                        // Calcula progresso baseado no tempo ou bytes
+                        val progress = if (contentLength > 0) {
+                            min(100f, (totalBytesRead * 100f) / contentLength)
                         } else {
-                            // sem content-length: só atualiza velocidade
-                            withContext(Dispatchers.Main) { onProgress(0f, mbps) }
+                            val elapsed = currentTime - startTime
+                            min(100f, (elapsed * 100f) / testDurationMs)
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            onProgress(progress, mbps)
                         }
                     }
                 }
 
-                val secs = (SystemClock.elapsedRealtime() - t0) / 1000.0
-                val mbps = (totalBytes * 8) / 1_000_000.0 / secs.coerceAtLeast(0.001)
-                withContext(Dispatchers.Main) { onDone(mbps) }
+                // Cálculo final
+                val totalTime = SystemClock.elapsedRealtime() - startTime
+                val finalMbps = if (totalTime > 0) {
+                    (totalBytesRead * 8.0) / (totalTime / 1000.0) / 1_000_000.0
+                } else {
+                    0.0
+                }
+
+                withContext(Dispatchers.Main) {
+                    onDone(finalMbps)
+                }
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             withContext(Dispatchers.Main) {
-                onError(e.message ?: "Falha no teste de velocidade")
+                when (e) {
+                    is IOException -> onError("Erro de conexão: ${e.message}")
+                    is SecurityException -> onError("Erro de segurança: ${e.message}")
+                    else -> onError("Erro: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun calculateSpeed(samples: List<Pair<Long, Long>>, startTime: Long): Double {
+        if (samples.size < 2) return 0.0
+
+        val recentSamples = samples.takeLast(10) // Últimas 10 amostras
+        if (recentSamples.size < 2) return 0.0
+
+        val firstSample = recentSamples.first()
+        val lastSample = recentSamples.last()
+
+        val bytes = lastSample.first - firstSample.first
+        val timeMs = lastSample.second - firstSample.second
+
+        return if (timeMs > 0) {
+            (bytes * 8.0) / (timeMs / 1000.0) / 1_000_000.0
+        } else {
+            0.0
+        }
+    }
+
+    fun startUpload(
+        url: String,
+        onProgress: (Float, Double) -> Unit,
+        onDone: (Double) -> Unit,
+        onError: (String) -> Unit,
+        reportIntervalMs: Int = 250,
+        testDurationMs: Long = 10000L
+    ) {
+        // Implementação similar ao download, mas enviando dados
+        activeJob?.cancel()
+
+        activeJob = scope.launch(Dispatchers.IO) {
+            try {
+                // Gera dados aleatórios alinhados em 16KB
+                val chunkSize = 64 * 1024 // 64KB chunks
+                val dataChunk = ByteArray(chunkSize) { (it % 256).toByte() }
+
+                // Por simplicidade, vamos simular o upload
+                // Em produção, você faria um POST real
+                withContext(Dispatchers.Main) {
+                    onError("Upload não implementado nesta versão")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Erro no upload")
+                }
             }
         }
     }
 
     fun stop() {
         activeJob?.cancel()
-        try { activeSocket?.forceStopTask() } catch (_: Throwable) {}
         activeJob = null
-        activeSocket = null
     }
 }
