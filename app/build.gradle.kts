@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.elftech.pingwifi"
+    namespace = "com.elftech.pingwifis"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.elftech.pingwifi"
+        applicationId = "com.elftech.pingwifis"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

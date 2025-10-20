@@ -1,4 +1,4 @@
-package com.elftech.pingwifi.data
+package com.elftech.pingwifis.data
 
 import kotlinx.coroutines.*
 import java.net.InetAddress
@@ -247,3 +247,4 @@ class TracerouteRunner(private val scope: CoroutineScope) {
         activeJob = null
     }
 }
+

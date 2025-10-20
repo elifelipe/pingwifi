@@ -1,4 +1,4 @@
-package com.elftech.pingwifi.ui
+package com.elftech.pingwifis.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -28,15 +27,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.elftech.pingwifi.data.model.ClientInfo
-import com.elftech.pingwifi.data.model.RunStatus
-import com.elftech.pingwifi.data.model.SpeedTestServer
-import com.elftech.pingwifi.data.model.TestPhase
-import com.elftech.pingwifi.model.WifiInfoData
+// IMPORTANT: Use data.model for all model imports
+import com.elftech.pingwifis.data.model.WifiInfoData
+import com.elftech.pingwifis.data.model.SpeedTestServer
+import com.elftech.pingwifis.data.model.ClientInfo
+import com.elftech.pingwifis.data.model.RunStatus
+import com.elftech.pingwifis.data.model.TestPhase
 import kotlinx.coroutines.delay
-import kotlin.math.cos
-import kotlin.math.sin
-
 @Composable
 fun ImprovedSpeedTestScreen(
     status: RunStatus,

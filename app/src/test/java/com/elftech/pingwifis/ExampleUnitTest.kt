@@ -1,4 +1,4 @@
-package com.elftech.pingwifi
+package com.elftech.pingwifis
 
 import org.junit.Test
 

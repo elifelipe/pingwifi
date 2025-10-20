@@ -1,15 +1,13 @@
-package com.elftech.pingwifi.viewmodel
+package com.elftech.pingwifis.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.elftech.pingwifi.data.IpInfoService
-import com.elftech.pingwifi.data.SpeedTestRunner
-import com.elftech.pingwifi.data.TracerouteRunner
-import com.elftech.pingwifi.data.WifiInfoReader
-import com.elftech.pingwifi.data.model.*
-import com.elftech.pingwifi.model.TracerouteState
-import com.elftech.pingwifi.model.WifiInfoData
+import com.elftech.pingwifis.data.IpInfoService
+import com.elftech.pingwifis.data.SpeedTestRunner
+import com.elftech.pingwifis.data.TracerouteRunner
+import com.elftech.pingwifis.data.WifiInfoReader
+import com.elftech.pingwifis.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +24,6 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val traceRunner = TracerouteRunner(viewModelScope)
     private val ipInfoService = IpInfoService()
 
-    // --- StateFlows for the UI ---
     private val _wifi = MutableStateFlow(WifiInfoData(false, null, null, null, null, null))
     val wifi: StateFlow<WifiInfoData> = _wifi.asStateFlow()
 
@@ -42,13 +39,6 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val _clientInfo = MutableStateFlow<ClientInfo?>(null)
     val clientInfo: StateFlow<ClientInfo?> = _clientInfo.asStateFlow()
 
-    // Servidores de teste disponíveis (Com URL HTTPS corrigido)
-    private val testServers = listOf(
-        SpeedTestServer("Google CDN", "BR", "São Paulo", "https://dl.google.com/android/repository/android-ndk-r25c-linux.zip"),
-        SpeedTestServer("Cloudflare", "BR", "Rio de Janeiro", "https://speed.cloudflare.com/__down?bytes=200000000"),
-        SpeedTestServer("OVH", "FR", "Paris", "https://proof.ovh.net/files/100Mb.dat")
-    )
-
     init {
         fetchClientInfo()
         selectBestServer()
@@ -63,7 +53,7 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun selectBestServer() {
         viewModelScope.launch {
-            _serverDetails.value = testServers.random()
+            _serverDetails.value = ipInfoService.getTestServers().random()
         }
     }
 
@@ -79,26 +69,24 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Reset e início
-                _extendedSpeed.value = ExtendedSpeedTestState(status = RunStatus.RUNNING, currentPhase = TestPhase.PING)
+                _extendedSpeed.value = ExtendedSpeedTestState(
+                    status = RunStatus.RUNNING,
+                    currentPhase = TestPhase.PING
+                )
                 delay(200)
 
-                // Fase 1: Ping
                 performPingTest()
                 _extendedSpeed.value = _extendedSpeed.value.copy(progressPct = 5f)
                 delay(500)
 
-                // Fase 2: Download
                 _extendedSpeed.value = _extendedSpeed.value.copy(currentPhase = TestPhase.DOWNLOAD)
                 performDownloadTest()
                 _extendedSpeed.value = _extendedSpeed.value.copy(progressPct = 50f)
                 delay(500)
 
-                // Fase 3: Upload (Simulado)
                 _extendedSpeed.value = _extendedSpeed.value.copy(currentPhase = TestPhase.UPLOAD)
                 performUploadTest()
 
-                // Conclusão
                 _extendedSpeed.value = _extendedSpeed.value.copy(
                     status = RunStatus.DONE,
                     currentPhase = TestPhase.COMPLETED,
@@ -108,7 +96,7 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 _extendedSpeed.value = _extendedSpeed.value.copy(
                     status = RunStatus.ERROR,
-                    error = e.message ?: "Erro desconhecido",
+                    error = e.message ?: "Unknown error",
                     currentPhase = TestPhase.IDLE
                 )
             }
@@ -128,13 +116,16 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
                     pings.add(System.currentTimeMillis() - startTime)
                 }
             } catch (e: Exception) {
-                // Ignora falhas individuais
+                // Ignore individual failures
             }
             delay(100)
         }
 
         if (pings.isEmpty()) {
-            _extendedSpeed.value = _extendedSpeed.value.copy(pingMs = Random.nextInt(20, 100), jitterMs = Random.nextInt(5, 20))
+            _extendedSpeed.value = _extendedSpeed.value.copy(
+                pingMs = Random.nextInt(20, 100),
+                jitterMs = Random.nextInt(5, 20)
+            )
             return
         }
 
@@ -153,7 +144,7 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
             onProgress = { pct, mbps ->
                 _extendedSpeed.value = _extendedSpeed.value.copy(
                     downloadMbps = mbps,
-                    progressPct = 5f + (pct / 100f * 45f) // Mapeia para 5-50%
+                    progressPct = 5f + (pct / 100f * 45f)
                 )
             },
             onDone = { finalMbps ->
@@ -166,16 +157,14 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
             }
         )
 
-        // Aguarda a conclusão do teste
         var waitTime = 0L
-        while (!testCompleted && waitTime < 15000L) { // Timeout de 15s
+        while (!testCompleted && waitTime < 15000L) {
             delay(100)
             waitTime += 100
         }
     }
 
     private suspend fun performUploadTest() {
-        // Simulação do teste de upload
         val downloadSpeed = _extendedSpeed.value.downloadMbps
         val targetUploadSpeed = downloadSpeed * Random.nextDouble(0.5, 0.9)
 
@@ -192,25 +181,22 @@ class NetworkViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun runTraceroute(host: String, maxHops: Int = 30) {
-        _trace.value = TracerouteState(status = com.elftech.pingwifi.model.RunStatus.RUNNING)
+        _trace.value = TracerouteState(status = RunStatus.RUNNING)
         traceRunner.run(
             host = host,
             maxHops = maxHops,
             onLine = { line ->
-                _trace.value = _trace.value.copy(
-                    lines = _trace.value.lines + line
-                )
+                _trace.value = _trace.value.copy(lines = _trace.value.lines + line)
             },
             onDone = {
-                _trace.value = _trace.value.copy(status = com.elftech.pingwifi.model.RunStatus.DONE)
+                _trace.value = _trace.value.copy(status = RunStatus.DONE)
             },
             onError = { err ->
                 _trace.value = _trace.value.copy(
-                    status = com.elftech.pingwifi.model.RunStatus.ERROR,
+                    status = RunStatus.ERROR,
                     error = err
                 )
             }
         )
     }
 }
-

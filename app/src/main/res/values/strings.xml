@@ -1,31 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Ping Wifi</string>
-    <string name="tab_speed">Velocidade</string>
-    <string name="tab_diagnosis">Diagnóstico</string>
-    <string name="status_testing">A testar velocidade%s</string>
-    <string name="status_done">Velocidade de Download</string>
-    <string name="status_error">Falha no Teste</string>
-    <string name="status_ready">Pronto para Testar</string>
-    <string name="button_test_again">Testar Novamente</string>
-    <string name="error_label">Erro: %s</string>
-    <string name="connection_details">Detalhes da Conexão</string>
-    <string name="detail_client">Cliente</string>
-    <string name="detail_location">Localização</string>
-    <string name="detail_server">Servidor</string>
-    <string name="detail_ssid">SSID</string>
-    <string name="detail_link_speed">Velocidade do Link</string>
-    <string name="fetching">A buscar…</string>
-    <string name="not_applicable">N/A</string>
-    <string name="no_wifi_connection">Não conectado ao Wi-Fi</string>
+    <string name="app_name">PingWiFi Pro</string>
+
+    <!-- WiFi Info Messages -->
+    <string name="no_wifi_connection">Não conectado ao WiFi</string>
     <string name="location_permission_needed">Permissão de localização necessária</string>
-    <string name="enable_location_for_ssid">Ative a Localização do dispositivo para ler o SSID</string>
+    <string name="enable_location_for_ssid">Ative a localização para ver o SSID</string>
     <string name="permission_denied">Permissão negada</string>
     <string name="error_reading_data">Erro ao ler dados</string>
-    <string name="traceroute_title">Traceroute</string>
-    <string name="traceroute_host_label">Host ou IP</string>
-    <string name="traceroute_start_button">Iniciar Traceroute</string>
-    <string name="no_test_server_available">Nenhum servidor de teste disponível.</string>
-    <string name="failed_to_start_test">Falha ao iniciar o teste</string>
-    <string name="traceroute_failed">Traceroute falhou (lib nativa ausente e fallback indisponível).</string>
+
+    <!-- Speed Test -->
+    <string name="testing_speed">Testando velocidade</string>
+    <string name="download_speed">Velocidade de Download</string>
+    <string name="upload_speed">Velocidade de Upload</string>
+    <string name="test_failed">Falha no teste</string>
+    <string name="ready_to_test">Pronto para testar</string>
+    <string name="test_again">Testar novamente</string>
+
+    <!-- Connection Details -->
+    <string name="connection_details">Detalhes da Conexão</string>
+    <string name="client">Cliente</string>
+    <string name="location">Localização</string>
+    <string name="server">Servidor</string>
+    <string name="ssid">SSID</string>
+    <string name="link_speed">Velocidade do Link</string>
+    <string name="searching">Buscando...</string>
+
+    <!-- Metrics -->
+    <string name="ping">Ping</string>
+    <string name="jitter">Jitter</string>
+    <string name="download">Download</string>
+    <string name="upload">Upload</string>
+    <string name="ms">ms</string>
+    <string name="mbps">Mbps</string>
+
+    <!-- Errors -->
+    <string name="error">Erro</string>
+    <string name="no_server_available">Nenhum servidor disponível</string>
+    <string name="connection_error">Erro de conexão</string>
+    <string name="unknown_error">Erro desconhecido</string>
+
+    <!-- Traceroute -->
+    <string name="traceroute">Traceroute</string>
+    <string name="destination_host">Host de destino</string>
+    <string name="start_traceroute">Iniciar Traceroute</string>
+
+    <!-- Server Selection -->
+    <string name="select_server">Selecionar Servidor</string>
+    <string name="loading_servers">Carregando servidores...</string>
+    <string name="choose_nearest_server">Escolha o servidor mais próximo para resultados precisos</string>
+    <string name="distance">Distância</string>
+    <string name="km">km</string>
+    <string name="selected">Selecionado</string>
+    <string name="close">Fechar</string>
 </resources>

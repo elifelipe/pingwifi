@@ -1,4 +1,4 @@
-package com.elftech.pingwifi.ui.theme
+package com.elftech.pingwifis.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

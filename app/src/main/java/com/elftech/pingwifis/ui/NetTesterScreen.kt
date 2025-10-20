@@ -1,4 +1,4 @@
-package com.elftech.pingwifi.ui
+package com.elftech.pingwifis.ui
 
 import android.Manifest
 import android.os.Build
@@ -17,9 +17,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.elftech.pingwifi.data.model.RunStatus
-import com.elftech.pingwifi.model.TracerouteState
-import com.elftech.pingwifi.viewmodel.NetworkViewModel
+// CORRECT IMPORTS
+import com.elftech.pingwifis.data.model.RunStatus
+import com.elftech.pingwifis.data.model.TracerouteState
+import com.elftech.pingwifis.viewmodel.NetworkViewModel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,7 +100,7 @@ fun NetTesterScreen(vm: NetworkViewModel) {
                     jitterMs = extendedSpeed.jitterMs,
                     onStartTest = { vm.startSpeedTest() }
                 )
-                1 -> DiagnosisTab(
+                1 -> BasicDiagnosisTab(
                     traceState = trace,
                     onRunTraceroute = { host -> vm.runTraceroute(host) }
                 )
@@ -109,7 +110,7 @@ fun NetTesterScreen(vm: NetworkViewModel) {
 }
 
 @Composable
-fun DiagnosisTab(
+fun BasicDiagnosisTab(
     traceState: TracerouteState,
     onRunTraceroute: (String) -> Unit
 ) {
@@ -133,7 +134,7 @@ fun DiagnosisTab(
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = { onRunTraceroute(traceHost) },
-                enabled = traceState.status != com.elftech.pingwifi.model.RunStatus.RUNNING,
+                enabled = traceState.status != RunStatus.RUNNING,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
@@ -142,7 +143,7 @@ fun DiagnosisTab(
             }
         }
 
-        if (traceState.status == com.elftech.pingwifi.model.RunStatus.RUNNING && traceState.lines.isEmpty()) {
+        if (traceState.status == RunStatus.RUNNING && traceState.lines.isEmpty()) {
             item {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -181,4 +182,3 @@ fun DiagnosisTab(
         }
     }
 }
-
