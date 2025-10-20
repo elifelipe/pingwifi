@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.net.InetAddress
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -61,10 +60,12 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     private fun observeConnection() {
         viewModelScope.launch {
             connectionManager.observeConnectionStatus().collect { status ->
+                val wasConnected = _connectionStatus.value.isConnected
                 _connectionStatus.value = status
 
-                if (!status.isConnected && _extendedSpeed.value.status == RunStatus.RUNNING) {
-                    // Para o teste se perder conexão
+                if (status.isConnected && !wasConnected) {
+                    initializeApp()
+                } else if (!status.isConnected && _extendedSpeed.value.status == RunStatus.RUNNING) {
                     stopTest()
                     _extendedSpeed.value = _extendedSpeed.value.copy(
                         status = RunStatus.ERROR,
@@ -81,121 +82,68 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
             _extendedSpeed.value = ExtendedSpeedTestState(status = RunStatus.IDLE)
 
             try {
-                // Verifica conexão primeiro
                 if (!_connectionStatus.value.isConnected) {
-                    Log.w("EnhancedNetVM", "Sem conexão durante inicialização")
+                    _testMessage.value = "Sem conexão. Verifique a internet."
                     _isLoadingServers.value = false
                     return@launch
                 }
 
-                // 1. Busca informações do cliente
-                _testMessage.value = "Detectando sua localização..."
-                fetchClientInfo()
-                delay(500)
+                _testMessage.value = "Identificando sua conexão..."
+                val info = ipInfoService.getClientInfo()
+                _clientInfo.value = info
+                if (info == null) {
+                    throw Exception("Não foi possível obter informações da sua conexão.")
+                }
+                delay(200)
 
-                // 2. Busca servidores próximos
                 _testMessage.value = "Procurando servidores próximos..."
-                fetchNearbyServers()
-                delay(500)
+                val servers = ipInfoService.getNearbyServers(info)
+                _availableServers.value = servers
+                if (servers.isEmpty()) {
+                    throw Exception("Nenhum servidor de teste encontrado.")
+                }
+                delay(200)
 
-                // 3. Seleciona o melhor servidor
                 _testMessage.value = "Selecionando o melhor servidor..."
-                selectBestServer()
-                delay(300)
+                selectBestServerByPing()
+                delay(200)
 
-                // 4. Atualiza info WiFi
-                _testMessage.value = "Verificando conexão..."
                 refreshWifi()
-
                 _testMessage.value = "Pronto para testar!"
-                _isLoadingServers.value = false
 
             } catch (e: Exception) {
                 Log.e("EnhancedNetVM", "Erro na inicialização", e)
                 _testMessage.value = "Erro: ${e.message}"
+                _serverDetails.value = SpeedTestServer("Cloudflare", "Global", "Worldwide", "https://speed.cloudflare.com/__down?bytes=50000000")
+            } finally {
                 _isLoadingServers.value = false
-
-                // Define servidor fallback
-                _serverDetails.value = SpeedTestServer(
-                    name = "Cloudflare CDN",
-                    country = "Global",
-                    city = "Worldwide",
-                    downloadUrl = "https://speed.cloudflare.com/__down?bytes=50000000"
-                )
             }
         }
     }
 
-    private fun fetchClientInfo() {
+    private fun selectBestServerByPing() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val info = ipInfoService.getClientInfo()
-                _clientInfo.value = info
-                Log.d("EnhancedNetVM", "Cliente detectado: ${info?.city}, ${info?.country}")
-            } catch (e: Exception) {
-                Log.e("EnhancedNetVM", "Erro ao buscar info do cliente", e)
-                _clientInfo.value = ClientInfo("Unknown", "Unknown", "BR")
+            val serversToTest = _availableServers.value.take(5)
+            if (serversToTest.isEmpty()) {
+                Log.w("EnhancedNetVM", "Nenhum servidor disponível para teste de ping.")
+                _serverDetails.value = _availableServers.value.firstOrNull()
+                return@launch
             }
-        }
-    }
 
-    private fun fetchNearbyServers() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val client = _clientInfo.value ?: ClientInfo("Unknown", "Unknown", "BR")
-                val servers = ipInfoService.getNearbyServers(client)
+            Log.d("EnhancedNetVM", "Testando latência de ${serversToTest.size} servidores...")
 
-                _availableServers.value = servers
-                Log.d("EnhancedNetVM", "Servidores encontrados: ${servers.size}")
-                servers.forEach { Log.d("EnhancedNetVM", "  - ${it.name} (${it.city})") }
-
-            } catch (e: Exception) {
-                Log.e("EnhancedNetVM", "Erro ao buscar servidores", e)
-                _availableServers.value = emptyList()
+            val serverPings = serversToTest.map { server ->
+                val ping = ipInfoService.pingServer(server)
+                Log.d("EnhancedNetVM", "  - ${server.name} (${server.city}): ${ping}ms")
+                server to ping
             }
-        }
-    }
 
-    private fun selectBestServer() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val servers = _availableServers.value
+            val bestServerPair = serverPings
+                .filter { it.second < 9999 }
+                .minByOrNull { it.second }
 
-                if (servers.isEmpty()) {
-                    Log.w("EnhancedNetVM", "Nenhum servidor disponível, usando fallback")
-                    _serverDetails.value = SpeedTestServer(
-                        name = "Cloudflare CDN",
-                        country = "Global",
-                        city = "Worldwide",
-                        downloadUrl = "https://speed.cloudflare.com/__down?bytes=50000000"
-                    )
-                    return@launch
-                }
-
-                Log.d("EnhancedNetVM", "Testando latência de ${servers.take(3).size} servidores...")
-
-                val serverPings: List<Pair<SpeedTestServer, Int>> = servers.take(3).map { server ->
-                    val ping = ipInfoService.pingServer(server)
-                    Log.d("EnhancedNetVM", "  ${server.name}: ${ping}ms")
-                    server to ping
-                }
-
-                val bestServerPair = serverPings
-                    .filter { it.second < 9999 }
-                    .minByOrNull { it.second }
-
-                _serverDetails.value = bestServerPair?.first ?: servers.first()
-                Log.d("EnhancedNetVM", "Melhor servidor: ${_serverDetails.value?.name}")
-
-            } catch (e: Exception) {
-                Log.e("EnhancedNetVM", "Erro ao selecionar servidor", e)
-                _serverDetails.value = SpeedTestServer(
-                    name = "Cloudflare CDN",
-                    country = "Global",
-                    city = "Worldwide",
-                    downloadUrl = "https://speed.cloudflare.com/__down?bytes=50000000"
-                )
-            }
+            _serverDetails.value = bestServerPair?.first ?: serversToTest.first()
+            Log.i("EnhancedNetVM", "Melhor servidor selecionado: ${_serverDetails.value?.name} com ${bestServerPair?.second ?: "N/A"}ms de ping.")
         }
     }
 
@@ -207,187 +155,118 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startSpeedTest() {
-        // Verifica conexão antes de iniciar
         if (!_connectionStatus.value.isConnected) {
-            _extendedSpeed.value = _extendedSpeed.value.copy(
-                status = RunStatus.ERROR,
-                error = "Sem conexão à internet"
-            )
+            _extendedSpeed.value = _extendedSpeed.value.copy(status = RunStatus.ERROR, error = "Sem conexão à internet")
             return
         }
-
-        if (_extendedSpeed.value.status == RunStatus.RUNNING) {
-            Log.w("EnhancedNetVM", "Teste já em execução")
-            return
-        }
+        if (_extendedSpeed.value.status == RunStatus.RUNNING) return
 
         val server = _serverDetails.value
         if (server == null) {
-            Log.e("EnhancedNetVM", "Nenhum servidor disponível")
-            _extendedSpeed.value = _extendedSpeed.value.copy(
-                status = RunStatus.ERROR,
-                error = "Nenhum servidor disponível. Verifique sua conexão."
-            )
+            _extendedSpeed.value = _extendedSpeed.value.copy(status = RunStatus.ERROR, error = "Nenhum servidor de teste disponível.")
             return
         }
 
         Log.d("EnhancedNetVM", "Iniciando teste com servidor: ${server.name}")
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             try {
+                // Reseta o estado para um novo teste, limpando ambas as listas de amostras
                 _extendedSpeed.value = ExtendedSpeedTestState(
                     status = RunStatus.RUNNING,
-                    currentPhase = TestPhase.PING
+                    currentPhase = TestPhase.PING,
+                    downloadSpeedSamples = emptyList(),
+                    uploadSpeedSamples = emptyList()
                 )
-                _testMessage.value = "Medindo latência..."
+                _testMessage.value = "Medindo latência e jitter..."
                 delay(200)
 
-                // Fase 1: Ping
-                Log.d("EnhancedNetVM", "Fase PING")
                 performPingTest(server)
                 delay(500)
 
-                // Fase 2: Download
-                Log.d("EnhancedNetVM", "Fase DOWNLOAD")
                 _extendedSpeed.value = _extendedSpeed.value.copy(currentPhase = TestPhase.DOWNLOAD)
                 _testMessage.value = "Testando velocidade de download..."
                 performDownloadTest(server)
                 delay(500)
 
-                // Fase 3: Upload
-                Log.d("EnhancedNetVM", "Fase UPLOAD")
                 _extendedSpeed.value = _extendedSpeed.value.copy(currentPhase = TestPhase.UPLOAD)
                 _testMessage.value = "Testando velocidade de upload..."
                 performUploadTest(server)
 
-                // Conclusão
-                Log.d("EnhancedNetVM", "Teste concluído!")
-                _testMessage.value = "Teste concluído com sucesso!"
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    status = RunStatus.DONE,
-                    currentPhase = TestPhase.COMPLETED,
-                    progressPct = 100f
-                )
+                _testMessage.value = "Teste concluído!"
+                _extendedSpeed.value = _extendedSpeed.value.copy(status = RunStatus.DONE, currentPhase = TestPhase.COMPLETED, progressPct = 100f)
 
             } catch (e: Exception) {
-                Log.e("EnhancedNetVM", "Erro no teste de velocidade", e)
-                _testMessage.value = "Erro no teste"
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    status = RunStatus.ERROR,
-                    error = e.message ?: "Erro desconhecido",
-                    currentPhase = TestPhase.IDLE
-                )
+                _testMessage.value = "Erro durante o teste."
+                _extendedSpeed.value = _extendedSpeed.value.copy(status = RunStatus.ERROR, error = e.message, currentPhase = TestPhase.IDLE)
             }
         }
     }
 
     private suspend fun performPingTest(server: SpeedTestServer) {
-        val host = server.downloadUrl
-            .substringAfter("://")
-            .substringBefore("/")
-
         val pings = mutableListOf<Long>()
         repeat(10) {
-            val startTime = System.currentTimeMillis()
             try {
-                val address = InetAddress.getByName(host)
-                if (address.isReachable(1000)) {
-                    pings.add(System.currentTimeMillis() - startTime)
+                val pingTime = ipInfoService.pingServer(server)
+                if (pingTime < 9999) {
+                    pings.add(pingTime.toLong())
                 }
-            } catch (e: Exception) {
-                Log.w("EnhancedNetVM", "Ping falhou: ${e.message}")
-            }
+            } catch (e: Exception) { Log.w("EnhancedNetVM", "Ping falhou: ${e.message}") }
             delay(100)
         }
 
-        val avgPing = if (pings.isNotEmpty()) pings.average().roundToInt() else 50
-        val jitter = if (pings.size > 1) {
-            pings.zipWithNext { a, b -> abs(a - b) }.average().roundToInt()
-        } else {
-            5
-        }
+        val avgPing = if (pings.isNotEmpty()) pings.average().roundToInt() else 999
+        val jitter = if (pings.size > 1) pings.zipWithNext { a, b -> abs(a - b) }.average().roundToInt() else 999
 
-        Log.d("EnhancedNetVM", "Ping médio: ${avgPing}ms, Jitter: ${jitter}ms")
-
-        _extendedSpeed.value = _extendedSpeed.value.copy(
-            pingMs = avgPing,
-            jitterMs = jitter,
-            progressPct = 10f
-        )
+        _extendedSpeed.value = _extendedSpeed.value.copy(pingMs = avgPing, jitterMs = jitter, progressPct = 10f)
     }
 
     private suspend fun performDownloadTest(server: SpeedTestServer) {
         var testCompleted = false
-
         speedRunner.startDownload(
             url = server.downloadUrl,
             onProgress = { pct, mbps ->
-                Log.d("EnhancedNetVM", "Download: ${"%.2f".format(pct)}% - ${"%.2f".format(mbps)} Mbps")
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    downloadMbps = mbps,
-                    progressPct = 10f + (pct / 100f * 40f)
-                )
+                _extendedSpeed.value = _extendedSpeed.value.copy(downloadMbps = mbps, progressPct = 10f + (pct / 100f * 40f))
             },
             onDone = { finalMbps ->
-                Log.d("EnhancedNetVM", "Download concluído: ${"%.2f".format(finalMbps)} Mbps")
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    downloadMbps = finalMbps,
-                    progressPct = 50f
-                )
+                _extendedSpeed.value = _extendedSpeed.value.copy(downloadMbps = finalMbps, progressPct = 50f)
                 testCompleted = true
             },
             onError = { err ->
-                Log.e("EnhancedNetVM", "Erro no download: $err")
-                _extendedSpeed.value = _extendedSpeed.value.copy(error = err)
-                testCompleted = true
+                _extendedSpeed.value = _extendedSpeed.value.copy(error = err); testCompleted = true
             },
-            testDurationMs = 10000L
+            onNewSample = { sample ->
+                val currentSamples = _extendedSpeed.value.downloadSpeedSamples
+                _extendedSpeed.value = _extendedSpeed.value.copy(downloadSpeedSamples = (currentSamples + sample).takeLast(100))
+            }
         )
-
         var waitTime = 0L
-        while (!testCompleted && waitTime < 15000L) {
-            delay(100)
-            waitTime += 100
-        }
+        while (!testCompleted && waitTime < 15000L) { delay(100); waitTime += 100 }
     }
 
     private suspend fun performUploadTest(server: SpeedTestServer) {
         var testCompleted = false
-
         speedRunner.startUpload(
             server = server,
             onProgress = { pct, mbps ->
-                Log.d("EnhancedNetVM", "Upload: ${"%.2f".format(pct)}% - ${"%.2f".format(mbps)} Mbps")
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    uploadMbps = mbps,
-                    progressPct = 50f + (pct / 100f * 50f)
-                )
+                _extendedSpeed.value = _extendedSpeed.value.copy(uploadMbps = mbps, progressPct = 50f + (pct / 100f * 50f))
             },
             onDone = { finalMbps ->
-                Log.d("EnhancedNetVM", "Upload concluído: ${"%.2f".format(finalMbps)} Mbps")
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    uploadMbps = finalMbps,
-                    progressPct = 100f
-                )
+                _extendedSpeed.value = _extendedSpeed.value.copy(uploadMbps = finalMbps, progressPct = 100f)
                 testCompleted = true
             },
             onError = { err ->
-                Log.w("EnhancedNetVM", "Upload falhou (simulando): $err")
-                val simulatedUpload = _extendedSpeed.value.downloadMbps * 0.75
-                _extendedSpeed.value = _extendedSpeed.value.copy(
-                    uploadMbps = simulatedUpload,
-                    progressPct = 100f
-                )
+                Log.w("EnhancedNetVM", "Upload falhou: $err")
+                _extendedSpeed.value = _extendedSpeed.value.copy(progressPct = 100f)
                 testCompleted = true
             },
-            testDurationMs = 10000L
+            onNewSample = { sample ->
+                val currentSamples = _extendedSpeed.value.uploadSpeedSamples
+                _extendedSpeed.value = _extendedSpeed.value.copy(uploadSpeedSamples = (currentSamples + sample).takeLast(100))
+            }
         )
-
         var waitTime = 0L
-        while (!testCompleted && waitTime < 15000L) {
-            delay(100)
-            waitTime += 100
-        }
+        while (!testCompleted && waitTime < 15000L) { delay(100); waitTime += 100 }
     }
 
     fun stopTest() {
@@ -397,26 +276,14 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
 
     fun runTraceroute(host: String, maxHops: Int = 30) {
         _trace.value = TracerouteState(status = RunStatus.RUNNING)
-        traceRunner.run(
-            host = host,
-            maxHops = maxHops,
-            onLine = { line ->
-                _trace.value = _trace.value.copy(lines = _trace.value.lines + line)
-            },
-            onDone = {
-                _trace.value = _trace.value.copy(status = RunStatus.DONE)
-            },
-            onError = { err ->
-                _trace.value = _trace.value.copy(
-                    status = RunStatus.ERROR,
-                    error = err
-                )
-            }
+        traceRunner.run(host, maxHops,
+            { line -> _trace.value = _trace.value.copy(lines = _trace.value.lines + line) },
+            { _trace.value = _trace.value.copy(status = RunStatus.DONE) },
+            { err -> _trace.value = _trace.value.copy(status = RunStatus.ERROR, error = err) }
         )
     }
 
     fun changeServer(server: SpeedTestServer) {
-        Log.d("EnhancedNetVM", "Mudando para servidor: ${server.name}")
         _serverDetails.value = server
     }
 
@@ -429,3 +296,4 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
         stopTest()
     }
 }
+

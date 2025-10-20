@@ -84,26 +84,11 @@ fun ModernSplashScreen(navController: NavController) {
             verticalArrangement = Arrangement.Center
         ) {
             ModernWiFiAnimation()
-
             Spacer(modifier = Modifier.height(40.dp))
-
-            Text(
-                text = "PingWiFi",
-                fontSize = 42.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
+            Text(text = "PingWiFi", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Teste de Velocidade Real",
-                fontSize = 16.sp,
-                color = Color(0xFF94A3B8)
-            )
-
+            Text(text = "Teste de Velocidade Real", fontSize = 16.sp, color = Color(0xFF94A3B8))
             Spacer(modifier = Modifier.height(32.dp))
-
             LoadingIndicator()
         }
     }
@@ -112,85 +97,28 @@ fun ModernSplashScreen(navController: NavController) {
 @Composable
 fun ModernWiFiAnimation() {
     val infiniteTransition = rememberInfiniteTransition(label = "wifi")
+    val waveProgress by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(1500, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "wave")
+    val rotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(animation = tween(3000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "rotation")
+    val scale by infiniteTransition.animateFloat(initialValue = 0.95f, targetValue = 1.05f, animationSpec = infiniteRepeatable(animation = tween(1000, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse), label = "scale")
 
-    val waveProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wave"
-    )
-
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(200.dp)
-    ) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(200.dp)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2
             val centerY = size.height / 2
             val baseRadius = size.minDimension / 5
-
-            // Core
-            drawCircle(
-                color = Color(0xFF3B82F6),
-                radius = 12f * scale,
-                center = Offset(centerX, centerY)
-            )
-
-            // Animated waves
+            drawCircle(color = Color(0xFF3B82F6), radius = 12f * scale, center = Offset(centerX, centerY))
             for (i in 1..3) {
                 val waveRadius = baseRadius * i * (1 + waveProgress * 0.4f)
                 val alpha = (1f - waveProgress) * 0.6f / i
-
-                drawCircle(
-                    color = Color(0xFF3B82F6).copy(alpha = alpha),
-                    radius = waveRadius,
-                    center = Offset(centerX, centerY),
-                    style = Stroke(width = 4f * (4 - i), cap = StrokeCap.Round)
-                )
+                drawCircle(color = Color(0xFF3B82F6).copy(alpha = alpha), radius = waveRadius, center = Offset(centerX, centerY), style = Stroke(width = 4f * (4 - i), cap = StrokeCap.Round))
             }
-
-            // Orbiting nodes
             for (i in 0..2) {
                 val angle = rotation + (i * 120f)
                 val orbitRadius = baseRadius * 2.5f
                 val x = centerX + cos(Math.toRadians(angle.toDouble())).toFloat() * orbitRadius
                 val y = centerY + sin(Math.toRadians(angle.toDouble())).toFloat() * orbitRadius
-
-                drawCircle(
-                    color = Color(0xFF10B981),
-                    radius = 8f,
-                    center = Offset(x, y)
-                )
-
-                drawLine(
-                    color = Color(0xFF10B981).copy(alpha = 0.3f),
-                    start = Offset(centerX, centerY),
-                    end = Offset(x, y),
-                    strokeWidth = 2f
-                )
+                drawCircle(color = Color(0xFF10B981), radius = 8f, center = Offset(x, y))
+                drawLine(color = Color(0xFF10B981).copy(alpha = 0.3f), start = Offset(centerX, centerY), end = Offset(x, y), strokeWidth = 2f)
             }
         }
     }
@@ -199,25 +127,12 @@ fun ModernWiFiAnimation() {
 @Composable
 fun LoadingIndicator() {
     var dotCount by remember { mutableStateOf(0) }
-
     LaunchedEffect(Unit) {
         while (true) {
             delay(400)
             dotCount = (dotCount + 1) % 4
         }
     }
-
-    val dots = when (dotCount) {
-        1 -> "."
-        2 -> ".."
-        3 -> "..."
-        else -> ""
-    }
-
-    Text(
-        text = "Iniciando$dots",
-        fontSize = 14.sp,
-        color = Color(0xFF64748B),
-        fontWeight = FontWeight.Medium
-    )
+    val dots = ".".repeat(dotCount)
+    Text(text = "Iniciando$dots", fontSize = 14.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
 }

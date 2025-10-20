@@ -1,19 +1,22 @@
-// File: app/src/main/java/com/elftech/pingwifis/data/model/Models.kt
-// This is the ONLY model file - delete all others!
-
 package com.elftech.pingwifis.data.model
 
 data class ClientInfo(
     val ipAddress: String,
     val city: String,
-    val country: String
+    val country: String,
+    val isp: String,
+    val lat: Double = 0.0,
+    val lon: Double = 0.0
 )
 
 data class SpeedTestServer(
     val name: String,
     val country: String,
     val city: String,
-    val downloadUrl: String
+    val downloadUrl: String,
+    val uploadUrl: String? = null,
+    val lat: Double = 0.0,
+    val lon: Double = 0.0
 )
 
 data class WifiInfoData(
@@ -41,7 +44,10 @@ data class ExtendedSpeedTestState(
     val uploadMbps: Double = 0.0,
     val pingMs: Int = 0,
     val jitterMs: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    // Armazena as amostras de velocidade para os gráficos separadamente
+    val downloadSpeedSamples: List<Double> = emptyList(),
+    val uploadSpeedSamples: List<Double> = emptyList()
 )
 
 data class TracerouteState(
@@ -49,3 +55,4 @@ data class TracerouteState(
     val lines: List<String> = emptyList(),
     val error: String? = null
 )
+

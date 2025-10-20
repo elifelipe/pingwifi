@@ -25,6 +25,13 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .addInterceptor { chain ->
+            val originalRequest = chain.request()
+            val requestWithUserAgent = originalRequest.newBuilder()
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+                .build()
+            chain.proceed(requestWithUserAgent)
+        }
         .build()
 
     fun startDownload(
@@ -32,8 +39,9 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         onProgress: (Float, Double) -> Unit,
         onDone: (Double) -> Unit,
         onError: (String) -> Unit,
+        onNewSample: (Double) -> Unit,
         reportIntervalMs: Int = 250,
-        testDurationMs: Long = 10000L
+        testDurationMs: Long = 10000L // Duração de 10 segundos para o download
     ) {
         activeJob?.cancel()
 
@@ -44,6 +52,7 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
                     onProgress = onProgress,
                     onDone = onDone,
                     onError = onError,
+                    onNewSample = onNewSample,
                     reportIntervalMs = reportIntervalMs,
                     testDurationMs = testDurationMs
                 )
@@ -60,6 +69,7 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         onProgress: (Float, Double) -> Unit,
         onDone: (Double) -> Unit,
         onError: (String) -> Unit,
+        onNewSample: (Double) -> Unit,
         reportIntervalMs: Int,
         testDurationMs: Long
     ) = withContext(Dispatchers.IO) {
@@ -80,7 +90,7 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
                 val contentLength = body.contentLength()
                 val source = body.source()
 
-                val bufferSize = 64 * 1024 // 64KB
+                val bufferSize = 64 * 1024
                 val buffer = Buffer()
 
                 var totalBytesRead = 0L
@@ -98,16 +108,15 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
                     buffer.clear()
 
                     val currentTime = SystemClock.elapsedRealtime()
-                    speedSamples.add(totalBytesRead to currentTime)
+                    speedSamples.add(bytesRead to currentTime) // Amostra: (bytes lidos nesta iteração, tempo atual)
 
-                    // Mantém apenas últimos 2 segundos de amostras
+                    // Mantém apenas últimos 2 segundos de amostras para o cálculo da média
                     speedSamples.removeAll { (currentTime - it.second) > 2000 }
 
                     if (currentTime - lastReportTime >= reportIntervalMs) {
                         lastReportTime = currentTime
 
-                        val mbps = calculateSpeed(speedSamples)
-
+                        val mbps = calculateAverageSpeed(speedSamples)
                         val progress = if (contentLength > 0) {
                             min(100f, (totalBytesRead * 100f) / contentLength)
                         } else {
@@ -117,6 +126,7 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
 
                         withContext(Dispatchers.Main) {
                             onProgress(progress, mbps)
+                            onNewSample(mbps) // Envia a amostra de velocidade suavizada para o gráfico
                         }
                     }
                 }
@@ -148,21 +158,33 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         onProgress: (Float, Double) -> Unit,
         onDone: (Double) -> Unit,
         onError: (String) -> Unit,
+        onNewSample: (Double) -> Unit,
         reportIntervalMs: Int = 250,
-        testDurationMs: Long = 10000L
+        testDurationMs: Long = 6000L // Duração de 6 segundos para o upload
     ) {
         activeJob?.cancel()
 
-        // Tenta derivar a URL de upload da URL de download. Isso é uma suposição comum.
-        val uploadUrl = server.downloadUrl.replaceAfterLast('/', "")
+        // LÓGICA DE CORREÇÃO: Verifica se existe um URL de upload explícito.
+        val uploadUrl = server.uploadUrl
+        if (uploadUrl == null) {
+            // Se não houver URL, não tenta adivinhar. Em vez disso, pula o teste de upload
+            // de forma graciosa, finalizando-o imediatamente com 0 Mbps.
+            scope.launch(Dispatchers.Main) {
+                onProgress(100f, 0.0) // Garante que a UI veja o progresso como completo
+                onNewSample(0.0)
+                onDone(0.0)
+            }
+            return
+        }
 
         activeJob = scope.launch(Dispatchers.IO) {
             try {
                 runUploadTest(
-                    url = uploadUrl,
+                    url = uploadUrl, // Usa o URL verificado
                     onProgress = onProgress,
                     onDone = onDone,
                     onError = onError,
+                    onNewSample = onNewSample,
                     reportIntervalMs = reportIntervalMs,
                     testDurationMs = testDurationMs
                 )
@@ -179,16 +201,13 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         onProgress: (Float, Double) -> Unit,
         onDone: (Double) -> Unit,
         onError: (String) -> Unit,
+        onNewSample: (Double) -> Unit,
         reportIntervalMs: Int,
         testDurationMs: Long
     ) = withContext(Dispatchers.IO) {
-        if (url.isEmpty()) {
-            onError("URL de upload não disponível")
-            return@withContext
-        }
-
+        // A checagem de URL vazia/nula agora é feita em startUpload
         try {
-            val chunkSize = 256 * 1024 // 256KB por chunk
+            val chunkSize = 256 * 1024
             val dataChunk = ByteArray(chunkSize) { (it % 256).toByte() }
 
             var totalBytesUploaded = 0L
@@ -212,21 +231,21 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
                         totalBytesUploaded += chunkSize
 
                         val currentTime = SystemClock.elapsedRealtime()
-                        speedSamples.add(totalBytesUploaded to currentTime)
+                        speedSamples.add(chunkSize.toLong() to currentTime)
                         speedSamples.removeAll { (currentTime - it.second) > 2000 }
 
                         if (currentTime - lastReportTime >= reportIntervalMs) {
                             lastReportTime = currentTime
 
-                            val mbps = calculateSpeed(speedSamples)
+                            val mbps = calculateAverageSpeed(speedSamples)
                             val progress = min(100f, ((currentTime - startTime) * 100f) / testDurationMs)
 
                             withContext(Dispatchers.Main) {
                                 onProgress(progress, mbps)
+                                onNewSample(mbps)
                             }
                         }
                     } else {
-                        // Se o servidor não aceitar POST, encerra o teste de upload
                         throw IOException("Servidor de upload não aceitou a conexão: ${response.code}")
                     }
                 }
@@ -249,20 +268,17 @@ class ImprovedSpeedTestRunner(private val scope: CoroutineScope) {
         }
     }
 
-    private fun calculateSpeed(samples: List<Pair<Long, Long>>): Double {
-        if (samples.size < 2) return 0.0
+    // Lógica de cálculo de velocidade aprimorada para usar uma média móvel.
+    private fun calculateAverageSpeed(samples: List<Pair<Long, Long>>): Double {
+        if (samples.isEmpty()) return 0.0
 
-        val recentSamples = samples.takeLast(10)
-        if (recentSamples.size < 2) return 0.0
+        val totalBytes = samples.sumOf { it.first }
+        val firstTime = samples.first().second
+        val lastTime = samples.last().second
+        val timeDelta = lastTime - firstTime
 
-        val firstSample = recentSamples.first()
-        val lastSample = recentSamples.last()
-
-        val bytes = lastSample.first - firstSample.first
-        val timeMs = lastSample.second - firstSample.second
-
-        return if (timeMs > 0) {
-            (bytes * 8.0) / (timeMs / 1000.0) / 1_000_000.0
+        return if (timeDelta > 0) {
+            (totalBytes * 8.0) / (timeDelta / 1000.0) / 1_000_000.0
         } else {
             0.0
         }

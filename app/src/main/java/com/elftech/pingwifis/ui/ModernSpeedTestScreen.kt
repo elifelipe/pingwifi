@@ -46,10 +46,10 @@ fun ModernSpeedTestScreen(
 ) {
     val scrollState = rememberScrollState()
 
-    // Dispara teste automaticamente
-    LaunchedEffect(serverDetails) {
+    // Dispara teste automaticamente se um servidor for selecionado e o teste estiver ocioso
+    LaunchedEffect(serverDetails, status) {
         if (serverDetails != null && status == RunStatus.IDLE) {
-            delay(800)
+            delay(800) // Pequeno delay para o usuário ver a UI antes do teste iniciar
             onStartTest()
         }
     }
@@ -58,11 +58,12 @@ fun ModernSpeedTestScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
+                // Fundo com gradiente suave para um visual mais moderno
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
-                        Color(0xFF0F172A)
+                        Color(0xFF0F172A), // Azul escuro (topo)
+                        Color(0xFF1E293B), // Azul intermediário
+                        Color(0xFF0F172A)  // Azul escuro (base)
                     )
                 )
             )
@@ -74,22 +75,16 @@ fun ModernSpeedTestScreen(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
             ModernHeader(clientInfo, isLoadingServers)
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Speed Gauge
             ModernSpeedGauge(
                 status = status,
                 testPhase = testPhase,
                 downloadSpeed = downloadMbps,
-                uploadSpeed = uploadMbps
+                uploadSpeed = uploadMbps,
+                progress = progress // <-- Passando o progresso para o medidor
             )
-
             Spacer(modifier = Modifier.height(32.dp))
-
-            // Metrics Cards
             ModernMetricsGrid(
                 pingMs = pingMs,
                 jitterMs = jitterMs,
@@ -98,36 +93,25 @@ fun ModernSpeedTestScreen(
                 status = status,
                 testPhase = testPhase
             )
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Action Button
-            ModernActionButton(
-                status = status,
-                onStartTest = onStartTest
-            )
-
-            error?.let {
+            ModernActionButton(status = status, onStartTest = onStartTest)
+            error?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it,
-                    color = Color(0xFFEF4444),
+                    color = Color(0xFFEF4444), // Cor de erro mais viva
                     fontSize = 14.sp,
                     modifier = Modifier.padding(top = 12.dp),
                     textAlign = TextAlign.Center
                 )
             }
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Connection Details
             ModernConnectionCard(
                 clientInfo = clientInfo,
                 serverDetails = serverDetails,
                 wifiData = wifiData,
                 onChangeServer = onChangeServer
             )
-
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(80.dp)) // Espaço extra no final para scroll
         }
     }
 }
@@ -145,7 +129,7 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
             Icon(
                 Icons.Default.Wifi,
                 contentDescription = null,
-                tint = Color(0xFF3B82F6),
+                tint = Color(0xFF3B82F6), // Azul vibrante
                 modifier = Modifier.size(32.dp)
             )
             Spacer(Modifier.width(12.dp))
@@ -156,9 +140,8 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
                 color = Color.White
             )
         }
-
         Spacer(Modifier.height(8.dp))
-
+        // Mostra um indicador de carregamento enquanto busca o servidor
         if (isLoading) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
@@ -170,7 +153,7 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
                 Text(
                     text = "Detectando servidor ideal...",
                     fontSize = 13.sp,
-                    color = Color(0xFF94A3B8)
+                    color = Color(0xFF94A3B8) // Cinza azulado
                 )
             }
         } else {
@@ -190,15 +173,18 @@ private fun ModernSpeedGauge(
     status: RunStatus,
     testPhase: TestPhase,
     downloadSpeed: Double,
-    uploadSpeed: Double
+    uploadSpeed: Double,
+    progress: Float // <-- Recebendo o progresso
 ) {
+    // Determina qual velocidade exibir com base na fase do teste
     val displaySpeed = when (testPhase) {
         TestPhase.DOWNLOAD -> downloadSpeed
         TestPhase.UPLOAD -> uploadSpeed
-        TestPhase.COMPLETED -> downloadSpeed
+        TestPhase.COMPLETED -> downloadSpeed // Mostra o download no final
         else -> 0.0
     }
 
+    // Anima a mudança de velocidade de forma suave
     val animatedSpeed by animateFloatAsState(
         targetValue = displaySpeed.toFloat(),
         animationSpec = spring(
@@ -214,7 +200,7 @@ private fun ModernSpeedGauge(
             .fillMaxWidth()
             .padding(vertical = 16.dp)
     ) {
-        // Phase Indicator
+        // Indicador de fase com animação de fade e slide
         AnimatedContent(
             targetState = testPhase,
             label = "phase",
@@ -235,18 +221,30 @@ private fun ModernSpeedGauge(
                 color = Color(0xFF60A5FA)
             )
         }
-
         Spacer(Modifier.height(24.dp))
-
-        // Speed Display
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(280.dp)
         ) {
-            // Animated Ring
-            CircularProgressWithGradient(
-                status = status,
-                modifier = Modifier.fillMaxSize()
+            // *** CORREÇÃO APLICADA AQUI ***
+            // Anima o progresso do anel de 0 a 1 (0% a 100%)
+            val animatedRingProgress by animateFloatAsState(
+                targetValue = when (status) {
+                    RunStatus.RUNNING -> progress / 100f // Converte a porcentagem para um valor entre 0.0 e 1.0
+                    RunStatus.DONE -> 1f // Completa o círculo no final
+                    else -> 0f // Zera o círculo se estiver ocioso ou com erro
+                },
+                animationSpec = tween(400, easing = LinearEasing), // Animação suave para o preenchimento
+                label = "ring_progress"
+            )
+
+            CircularProgressIndicator(
+                progress = { animatedRingProgress }, // Usa o valor animado para o preenchimento
+                modifier = Modifier.fillMaxSize(),
+                strokeWidth = 16.dp,
+                trackColor = Color(0xFF1E293B),
+                color = if (testPhase == TestPhase.UPLOAD) Color(0xFF3B82F6) else Color(0xFF10B981),
+                strokeCap = StrokeCap.Round
             )
 
             Column(
@@ -263,54 +261,24 @@ private fun ModernSpeedGauge(
                     text = "Mbps",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Light,
-                    color = Color(0xFFCBD5E1)
+                    color = Color(0xFFCBD5E1) // Cinza claro
                 )
-
-                if (testPhase == TestPhase.UPLOAD) {
-                    Spacer(Modifier.height(8.dp))
+                // Ícone que indica a fase atual (download/upload)
+                Spacer(Modifier.height(8.dp))
+                AnimatedVisibility(
+                    visible = testPhase == TestPhase.UPLOAD || testPhase == TestPhase.DOWNLOAD,
+                    enter = scaleIn() + fadeIn(),
+                    exit = scaleOut() + fadeOut()
+                ) {
                     Icon(
-                        Icons.Default.ArrowUpward,
+                        if (testPhase == TestPhase.UPLOAD) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                         contentDescription = null,
-                        tint = Color(0xFF3B82F6),
-                        modifier = Modifier.size(24.dp)
-                    )
-                } else if (testPhase == TestPhase.DOWNLOAD) {
-                    Spacer(Modifier.height(8.dp))
-                    Icon(
-                        Icons.Default.ArrowDownward,
-                        contentDescription = null,
-                        tint = Color(0xFF10B981),
+                        tint = if (testPhase == TestPhase.UPLOAD) Color(0xFF3B82F6) else Color(0xFF10B981),
                         modifier = Modifier.size(24.dp)
                     )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CircularProgressWithGradient(status: RunStatus, modifier: Modifier = Modifier) {
-    val progress = when(status) {
-        RunStatus.RUNNING -> 0.75f
-        RunStatus.DONE -> 1f
-        else -> 0f
-    }
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = tween(800, easing = FastOutSlowInEasing),
-        label = "progress"
-    )
-
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(
-            progress = { animatedProgress },
-            modifier = Modifier.fillMaxSize(),
-            strokeWidth = 16.dp,
-            trackColor = Color(0xFF1E293B),
-            color = Color(0xFF3B82F6),
-            strokeCap = StrokeCap.Round
-        )
     }
 }
 
@@ -323,6 +291,7 @@ private fun ModernMetricsGrid(
     status: RunStatus,
     testPhase: TestPhase
 ) {
+    // Grid 2x2 para as métricas
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -333,7 +302,7 @@ private fun ModernMetricsGrid(
                 value = "$pingMs",
                 unit = "ms",
                 icon = Icons.Default.Timer,
-                color = Color(0xFF8B5CF6),
+                color = Color(0xFF8B5CF6), // Roxo
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -342,7 +311,7 @@ private fun ModernMetricsGrid(
                 value = "$jitterMs",
                 unit = "ms",
                 icon = Icons.Default.NetworkCheck,
-                color = Color(0xFFEC4899),
+                color = Color(0xFFEC4899), // Rosa
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -356,7 +325,7 @@ private fun ModernMetricsGrid(
                 value = String.format("%.1f", downloadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowDownward,
-                color = Color(0xFF10B981),
+                color = Color(0xFF10B981), // Verde
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.DOWNLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -365,7 +334,7 @@ private fun ModernMetricsGrid(
                 value = String.format("%.1f", uploadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowUpward,
-                color = Color(0xFF3B82F6),
+                color = Color(0xFF3B82F6), // Azul
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.UPLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -386,10 +355,10 @@ private fun ModernMetricCard(
     Card(
         modifier = modifier
             .height(110.dp)
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+            .shadow(8.dp, RoundedCornerShape(20.dp)), // Sombra suave
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
+            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f) // Fundo semitransparente
         )
     ) {
         Column(
@@ -403,43 +372,22 @@ private fun ModernMetricCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = label,
-                    fontSize = 13.sp,
-                    color = Color(0xFF94A3B8),
-                    fontWeight = FontWeight.Medium
-                )
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(20.dp)
-                )
+                Text(text = label, fontSize = 13.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.Medium)
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
             }
 
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    color = color,
-                    strokeWidth = 3.dp
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = value,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = unit,
-                        fontSize = 14.sp,
-                        color = Color(0xFF94A3B8),
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+            // Exibe um indicador de progresso enquanto a métrica está sendo testada
+            AnimatedContent(targetState = isLoading, label = "metric_loading") { loading ->
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = color, strokeWidth = 3.dp)
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = unit, fontSize = 14.sp, color = Color(0xFF94A3B8), modifier = Modifier.padding(bottom = 4.dp))
+                    }
                 }
             }
         }
@@ -447,10 +395,7 @@ private fun ModernMetricCard(
 }
 
 @Composable
-private fun ModernActionButton(
-    status: RunStatus,
-    onStartTest: () -> Unit
-) {
+private fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
     val buttonText = when (status) {
         RunStatus.RUNNING -> "Testando"
         RunStatus.DONE -> "Testar Novamente"
@@ -469,7 +414,7 @@ private fun ModernActionButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = Color(0xFF3B82F6),
             contentColor = Color.White,
-            disabledContainerColor = Color(0xFF475569)
+            disabledContainerColor = Color(0xFF475569) // Cor desabilitada mais clara
         )
     ) {
         if (status == RunStatus.RUNNING) {
@@ -483,11 +428,7 @@ private fun ModernActionButton(
             Icon(Icons.Default.PlayArrow, contentDescription = null)
             Spacer(Modifier.width(8.dp))
         }
-        Text(
-            text = buttonText,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Text(text = buttonText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -498,16 +439,14 @@ private fun ModernConnectionCard(
     wifiData: WifiInfoData,
     onChangeServer: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(true) } // Inicia expandido
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(8.dp, RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B).copy(alpha = 0.8f))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -517,54 +456,26 @@ private fun ModernConnectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Detalhes da Conexão",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
+                Text("Detalhes da Conexão", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = "Toggle",
-                    tint = Color(0xFF94A3B8)
+                    contentDescription = "Toggle", tint = Color(0xFF94A3B8)
                 )
             }
 
             AnimatedVisibility(visible = expanded) {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     serverDetails?.let { server ->
-                        ModernInfoRow(
-                            icon = Icons.Default.Storage,
-                            label = "Servidor",
-                            value = "${server.name} - ${server.city}",
-                            showDivider = true
-                        )
+                        ModernInfoRow(icon = Icons.Default.Storage, label = "Servidor", value = "${server.name} - ${server.city}", showDivider = true)
                     }
-
                     if (wifiData.isWifi && wifiData.ssid != null) {
-                        ModernInfoRow(
-                            icon = Icons.Default.Wifi,
-                            label = "Rede",
-                            value = wifiData.ssid!!,
-                            showDivider = true
-                        )
+                        ModernInfoRow(icon = Icons.Default.Wifi, label = "Rede", value = wifiData.ssid!!, showDivider = true)
                         wifiData.linkSpeedMbps?.let {
-                            ModernInfoRow(
-                                icon = Icons.Default.SignalCellularAlt,
-                                label = "Velocidade do Link",
-                                value = "$it Mbps",
-                                showDivider = true
-                            )
+                            ModernInfoRow(icon = Icons.Default.SignalCellularAlt, label = "Velocidade do Link", value = "$it Mbps", showDivider = true)
                         }
                     }
-
                     clientInfo?.let {
-                        ModernInfoRow(
-                            icon = Icons.Default.Public,
-                            label = "IP Público",
-                            value = it.ipAddress,
-                            showDivider = false
-                        )
+                        ModernInfoRow(icon = Icons.Default.Public, label = "IP Público", value = it.ipAddress, showDivider = false)
                     }
                 }
             }
@@ -573,12 +484,7 @@ private fun ModernConnectionCard(
 }
 
 @Composable
-private fun ModernInfoRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    showDivider: Boolean
-) {
+private fun ModernInfoRow(icon: ImageVector, label: String, value: String, showDivider: Boolean) {
     Column {
         Row(
             modifier = Modifier
@@ -586,32 +492,15 @@ private fun ModernInfoRow(
                 .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color(0xFF3B82F6),
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(imageVector = icon, contentDescription = null, tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    fontSize = 12.sp,
-                    color = Color(0xFF94A3B8)
-                )
-                Text(
-                    text = value,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
-                )
+                Text(text = label, fontSize = 12.sp, color = Color(0xFF94A3B8))
+                Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White)
             }
         }
         if (showDivider) {
-            HorizontalDivider(
-                color = Color(0xFF334155),
-                thickness = 1.dp
-            )
+            HorizontalDivider(color = Color(0xFF334155), thickness = 1.dp)
         }
     }
 }

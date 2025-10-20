@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+// Tipografia aprimorada para melhor legibilidade e hierarquia visual
 val EnhancedTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = FontFamily.Default,
