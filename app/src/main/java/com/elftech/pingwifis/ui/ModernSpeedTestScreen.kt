@@ -2,6 +2,7 @@ package com.elftech.pingwifis.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elftech.pingwifis.data.model.*
 import kotlinx.coroutines.delay
+import kotlin.math.max
 
 @Composable
 fun ModernSpeedTestScreen(
@@ -41,15 +45,16 @@ fun ModernSpeedTestScreen(
     pingMs: Int,
     jitterMs: Int,
     isLoadingServers: Boolean,
-    onStartTest: () -> Unit,
-    onChangeServer: () -> Unit
+    downloadSpeedSamples: List<Double>,
+    uploadSpeedSamples: List<Double>,
+    onStartTest: () -> Unit
 ) {
     val scrollState = rememberScrollState()
 
-    // Dispara teste automaticamente se um servidor for selecionado e o teste estiver ocioso
+    // Dispara o teste automaticamente QUANDO o servidor for encontrado
     LaunchedEffect(serverDetails, status) {
         if (serverDetails != null && status == RunStatus.IDLE) {
-            delay(800) // Pequeno delay para o usuário ver a UI antes do teste iniciar
+            delay(800)
             onStartTest()
         }
     }
@@ -58,12 +63,11 @@ fun ModernSpeedTestScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                // Fundo com gradiente suave para um visual mais moderno
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A), // Azul escuro (topo)
-                        Color(0xFF1E293B), // Azul intermediário
-                        Color(0xFF0F172A)  // Azul escuro (base)
+                        Color(0xFF0F172A),
+                        Color(0xFF1E293B),
+                        Color(0xFF0F172A)
                     )
                 )
             )
@@ -75,6 +79,7 @@ fun ModernSpeedTestScreen(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Header agora precisa do "isLoadingServers"
             ModernHeader(clientInfo, isLoadingServers)
             Spacer(modifier = Modifier.height(24.dp))
             ModernSpeedGauge(
@@ -82,7 +87,17 @@ fun ModernSpeedTestScreen(
                 testPhase = testPhase,
                 downloadSpeed = downloadMbps,
                 uploadSpeed = uploadMbps,
-                progress = progress // <-- Passando o progresso para o medidor
+                progress = progress
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            SpeedTestGraph(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                downloadSamples = downloadSpeedSamples,
+                uploadSamples = uploadSpeedSamples,
+                status = status,
+                phase = testPhase
             )
             Spacer(modifier = Modifier.height(32.dp))
             ModernMetricsGrid(
@@ -98,26 +113,119 @@ fun ModernSpeedTestScreen(
             error?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it,
-                    color = Color(0xFFEF4444), // Cor de erro mais viva
+                    color = Color(0xFFEF4444),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(top = 12.dp),
                     textAlign = TextAlign.Center
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
+            // Connection card não precisa mais do "onChangeServer"
             ModernConnectionCard(
                 clientInfo = clientInfo,
                 serverDetails = serverDetails,
-                wifiData = wifiData,
-                onChangeServer = onChangeServer
+                wifiData = wifiData
             )
-            Spacer(modifier = Modifier.height(80.dp)) // Espaço extra no final para scroll
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
 
+// Composable do gráfico atualizado para lidar com as duas listas e a sobreposição
 @Composable
-private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
+fun SpeedTestGraph(
+    modifier: Modifier = Modifier,
+    downloadSamples: List<Double>,
+    uploadSamples: List<Double>,
+    status: RunStatus,
+    phase: TestPhase
+) {
+    Box(modifier = modifier) {
+        // Cores para cada tipo de teste
+        val downloadColor = Color(0xFF10B981)
+        val uploadColor = Color(0xFF3B82F6)
+
+        // Determina o valor máximo para normalizar a altura do gráfico
+        val maxDownload = downloadSamples.maxOrNull() ?: 0.0
+        val maxUpload = uploadSamples.maxOrNull() ?: 0.0
+        val overallMax = max(maxDownload, maxUpload).toFloat()
+
+        // Desenha o gráfico de download (sempre, se houver dados)
+        if (downloadSamples.isNotEmpty()) {
+            val isVisible = status == RunStatus.DONE || (status == RunStatus.RUNNING && phase == TestPhase.DOWNLOAD)
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500)),
+                exit = fadeOut(animationSpec = tween(500))
+            ) {
+                GraphPath(
+                    samples = downloadSamples,
+                    color = downloadColor,
+                    maxSample = if (status == RunStatus.DONE) overallMax else maxDownload.toFloat()
+                )
+            }
+        }
+
+        // Desenha o gráfico de upload (se houver dados)
+        if (uploadSamples.isNotEmpty()) {
+            val isVisible = status == RunStatus.DONE || (status == RunStatus.RUNNING && phase == TestPhase.UPLOAD)
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500)),
+                exit = fadeOut(animationSpec = tween(500))
+            ) {
+                GraphPath(
+                    samples = uploadSamples,
+                    color = uploadColor,
+                    maxSample = if (status == RunStatus.DONE) overallMax else maxUpload.toFloat()
+                )
+            }
+        }
+    }
+}
+
+// Helper Composable para desenhar um caminho de gráfico individual (evita repetição de código)
+@Composable
+internal fun GraphPath( // Removido 'private' para 'internal' (ou sem modificador)
+    samples: List<Double>,
+    color: Color,
+    maxSample: Float
+) {
+    val brush = Brush.verticalGradient(
+        colors = listOf(color.copy(alpha = 0.4f), Color.Transparent)
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        if (samples.size > 1) {
+            val path = Path()
+            val linePath = Path()
+            path.moveTo(0f, size.height) // Começa no canto inferior esquerdo
+
+            samples.forEachIndexed { index, sample ->
+                val x = (index.toFloat() / (samples.size - 1).coerceAtLeast(1)) * size.width
+                val y = size.height - ((sample.toFloat() / maxSample.coerceAtLeast(1f)) * size.height)
+
+                if (index == 0) {
+                    path.lineTo(x, y)
+                    linePath.moveTo(x, y)
+                } else {
+                    path.lineTo(x, y)
+                    linePath.lineTo(x, y)
+                }
+            }
+
+            path.lineTo(size.width, size.height) // Fecha no canto inferior direito
+            path.close()
+
+            drawPath(path, brush) // Desenha o preenchimento
+            drawPath(linePath, color, style = Stroke(width = 6f, cap = StrokeCap.Round)) // Desenha a linha
+        }
+    }
+}
+
+
+@Composable
+fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -129,7 +237,7 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
             Icon(
                 Icons.Default.Wifi,
                 contentDescription = null,
-                tint = Color(0xFF3B82F6), // Azul vibrante
+                tint = Color(0xFF3B82F6),
                 modifier = Modifier.size(32.dp)
             )
             Spacer(Modifier.width(12.dp))
@@ -141,7 +249,8 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        // Mostra um indicador de carregamento enquanto busca o servidor
+
+        // Restaura o indicador de carregamento
         if (isLoading) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
@@ -153,7 +262,7 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
                 Text(
                     text = "Detectando servidor ideal...",
                     fontSize = 13.sp,
-                    color = Color(0xFF94A3B8) // Cinza azulado
+                    color = Color(0xFF94A3B8)
                 )
             }
         } else {
@@ -169,14 +278,13 @@ private fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
 }
 
 @Composable
-private fun ModernSpeedGauge(
+fun ModernSpeedGauge(
     status: RunStatus,
     testPhase: TestPhase,
     downloadSpeed: Double,
     uploadSpeed: Double,
-    progress: Float // <-- Recebendo o progresso
+    progress: Float
 ) {
-    // Determina qual velocidade exibir com base na fase do teste
     val displaySpeed = when (testPhase) {
         TestPhase.DOWNLOAD -> downloadSpeed
         TestPhase.UPLOAD -> uploadSpeed
@@ -184,7 +292,6 @@ private fun ModernSpeedGauge(
         else -> 0.0
     }
 
-    // Anima a mudança de velocidade de forma suave
     val animatedSpeed by animateFloatAsState(
         targetValue = displaySpeed.toFloat(),
         animationSpec = spring(
@@ -200,7 +307,6 @@ private fun ModernSpeedGauge(
             .fillMaxWidth()
             .padding(vertical = 16.dp)
     ) {
-        // Indicador de fase com animação de fade e slide
         AnimatedContent(
             targetState = testPhase,
             label = "phase",
@@ -226,20 +332,18 @@ private fun ModernSpeedGauge(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(280.dp)
         ) {
-            // *** CORREÇÃO APLICADA AQUI ***
-            // Anima o progresso do anel de 0 a 1 (0% a 100%)
             val animatedRingProgress by animateFloatAsState(
                 targetValue = when (status) {
-                    RunStatus.RUNNING -> progress / 100f // Converte a porcentagem para um valor entre 0.0 e 1.0
-                    RunStatus.DONE -> 1f // Completa o círculo no final
-                    else -> 0f // Zera o círculo se estiver ocioso ou com erro
+                    RunStatus.RUNNING -> progress / 100f
+                    RunStatus.DONE -> 1f
+                    else -> 0f
                 },
-                animationSpec = tween(400, easing = LinearEasing), // Animação suave para o preenchimento
+                animationSpec = tween(400, easing = LinearEasing),
                 label = "ring_progress"
             )
 
             CircularProgressIndicator(
-                progress = { animatedRingProgress }, // Usa o valor animado para o preenchimento
+                progress = { animatedRingProgress },
                 modifier = Modifier.fillMaxSize(),
                 strokeWidth = 16.dp,
                 trackColor = Color(0xFF1E293B),
@@ -261,9 +365,8 @@ private fun ModernSpeedGauge(
                     text = "Mbps",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Light,
-                    color = Color(0xFFCBD5E1) // Cinza claro
+                    color = Color(0xFFCBD5E1)
                 )
-                // Ícone que indica a fase atual (download/upload)
                 Spacer(Modifier.height(8.dp))
                 AnimatedVisibility(
                     visible = testPhase == TestPhase.UPLOAD || testPhase == TestPhase.DOWNLOAD,
@@ -283,7 +386,7 @@ private fun ModernSpeedGauge(
 }
 
 @Composable
-private fun ModernMetricsGrid(
+fun ModernMetricsGrid(
     pingMs: Int,
     jitterMs: Int,
     downloadMbps: Double,
@@ -291,7 +394,6 @@ private fun ModernMetricsGrid(
     status: RunStatus,
     testPhase: TestPhase
 ) {
-    // Grid 2x2 para as métricas
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -302,7 +404,7 @@ private fun ModernMetricsGrid(
                 value = "$pingMs",
                 unit = "ms",
                 icon = Icons.Default.Timer,
-                color = Color(0xFF8B5CF6), // Roxo
+                color = Color(0xFF8B5CF6),
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -311,7 +413,7 @@ private fun ModernMetricsGrid(
                 value = "$jitterMs",
                 unit = "ms",
                 icon = Icons.Default.NetworkCheck,
-                color = Color(0xFFEC4899), // Rosa
+                color = Color(0xFFEC4899),
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -325,7 +427,7 @@ private fun ModernMetricsGrid(
                 value = String.format("%.1f", downloadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowDownward,
-                color = Color(0xFF10B981), // Verde
+                color = Color(0xFF10B981),
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.DOWNLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -334,7 +436,7 @@ private fun ModernMetricsGrid(
                 value = String.format("%.1f", uploadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowUpward,
-                color = Color(0xFF3B82F6), // Azul
+                color = Color(0xFF3B82F6),
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.UPLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -343,7 +445,7 @@ private fun ModernMetricsGrid(
 }
 
 @Composable
-private fun ModernMetricCard(
+fun ModernMetricCard(
     label: String,
     value: String,
     unit: String,
@@ -355,10 +457,10 @@ private fun ModernMetricCard(
     Card(
         modifier = modifier
             .height(110.dp)
-            .shadow(8.dp, RoundedCornerShape(20.dp)), // Sombra suave
+            .shadow(8.dp, RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f) // Fundo semitransparente
+            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
         )
     ) {
         Column(
@@ -376,7 +478,6 @@ private fun ModernMetricCard(
                 Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
             }
 
-            // Exibe um indicador de progresso enquanto a métrica está sendo testada
             AnimatedContent(targetState = isLoading, label = "metric_loading") { loading ->
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.size(28.dp), color = color, strokeWidth = 3.dp)
@@ -395,7 +496,7 @@ private fun ModernMetricCard(
 }
 
 @Composable
-private fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
+fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
     val buttonText = when (status) {
         RunStatus.RUNNING -> "Testando"
         RunStatus.DONE -> "Testar Novamente"
@@ -414,7 +515,7 @@ private fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
         colors = ButtonDefaults.buttonColors(
             containerColor = Color(0xFF3B82F6),
             contentColor = Color.White,
-            disabledContainerColor = Color(0xFF475569) // Cor desabilitada mais clara
+            disabledContainerColor = Color(0xFF475569)
         )
     ) {
         if (status == RunStatus.RUNNING) {
@@ -433,13 +534,12 @@ private fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
 }
 
 @Composable
-private fun ModernConnectionCard(
+fun ModernConnectionCard(
     clientInfo: ClientInfo?,
     serverDetails: SpeedTestServer?,
-    wifiData: WifiInfoData,
-    onChangeServer: () -> Unit
+    wifiData: WifiInfoData
 ) {
-    var expanded by remember { mutableStateOf(true) } // Inicia expandido
+    var expanded by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier
@@ -475,7 +575,8 @@ private fun ModernConnectionCard(
                         }
                     }
                     clientInfo?.let {
-                        ModernInfoRow(icon = Icons.Default.Public, label = "IP Público", value = it.ipAddress, showDivider = false)
+                        ModernInfoRow(icon = Icons.Default.Public, label = "IP Público", value = it.ipAddress, showDivider = true)
+                        ModernInfoRow(icon = Icons.Default.Business, label = "Provedor", value = it.isp, showDivider = false)
                     }
                 }
             }
@@ -484,7 +585,7 @@ private fun ModernConnectionCard(
 }
 
 @Composable
-private fun ModernInfoRow(icon: ImageVector, label: String, value: String, showDivider: Boolean) {
+fun ModernInfoRow(icon: ImageVector, label: String, value: String, showDivider: Boolean) {
     Column {
         Row(
             modifier = Modifier
@@ -504,4 +605,3 @@ private fun ModernInfoRow(icon: ImageVector, label: String, value: String, showD
         }
     }
 }
-

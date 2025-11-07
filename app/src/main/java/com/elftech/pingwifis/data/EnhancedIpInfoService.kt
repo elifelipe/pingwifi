@@ -32,7 +32,24 @@ class EnhancedIpInfoService {
         .build()
 
     suspend fun getClientInfo(): ClientInfo? = withContext(Dispatchers.IO) {
-        // Esta função continua sendo um bom fallback, mas a fonte primária agora é a config da Ookla.
+        // Tenta obter via Ookla primeiro, que é mais preciso para o ISP
+        var ooklaClientInfo: ClientInfo? = null
+        try {
+            val configRequest = Request.Builder().url("https://www.speedtest.net/speedtest-config.php").build()
+            val configResponse = client.newCall(configRequest).execute()
+            if (configResponse.isSuccessful) {
+                val xmlBody = configResponse.body?.string()
+                if (xmlBody != null) {
+                    val (clientInfo, _) = parseClientInfoFromConfig(xmlBody)
+                    ooklaClientInfo = clientInfo // Salva a info da Ookla
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Ookla falhou, mas continuamos para o fallback
+        }
+
+        // AGORA, SEMPRE TENTA ip-api.com para obter a cidade
         try {
             val request = Request.Builder()
                 .url("http://ip-api.com/json?fields=status,message,countryCode,city,lat,lon,isp,query")
@@ -42,119 +59,202 @@ class EnhancedIpInfoService {
                 response.body?.string()?.let { body ->
                     val json = JSONObject(body)
                     if (json.getString("status") == "success") {
-                        return@withContext ClientInfo(
-                            ipAddress = json.optString("query", "Unknown"),
-                            city = json.optString("city", "Unknown"),
-                            country = json.optString("countryCode", "Unknown"),
-                            isp = json.optString("isp", "Unknown"),
-                            lat = json.optDouble("lat", 0.0),
-                            lon = json.optDouble("lon", 0.0)
-                        )
+                        val ipApiCity = json.optString("city", "Unknown")
+                        val ipApiCountry = json.optString("countryCode", "Unknown")
+
+                        if (ooklaClientInfo != null) {
+                            // SUCESSO: Temos Ookla. Vamos "remendar" a cidade.
+                            // Se a cidade do ip-api for válida, use-a.
+                            if (ipApiCity != "Unknown") {
+                                return@withContext ooklaClientInfo.copy(city = ipApiCity)
+                            } else {
+                                // ip-api também não sabe a cidade,
+                                // mas a Ookla pode ter um país melhor.
+                                // Se o país da Ookla for "Unknown", use o do ip-api.
+                                val finalCountry = if (ooklaClientInfo.country == "Unknown") ipApiCountry else ooklaClientInfo.country
+                                return@withContext ooklaClientInfo.copy(city = "Unknown", country = finalCountry)
+                            }
+                        } else {
+                            // FALLBACK: Ookla falhou. Use os dados do ip-api.
+                            return@withContext ClientInfo(
+                                ipAddress = json.optString("query", "Unknown"),
+                                city = ipApiCity,
+                                country = ipApiCountry,
+                                isp = json.optString("isp", "Unknown"),
+                                lat = json.optDouble("lat", 0.0),
+                                lon = json.optDouble("lon", 0.0)
+                            )
+                        }
                     }
                 }
             }
-            null
+
+            // Se chegamos aqui, o ip-api falhou.
+            // Retorna o que tivermos da Ookla (pode ser nulo ou ter "Unknown" city)
+            return@withContext ooklaClientInfo
+
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            // Se o ip-api falhar com exceção, retorna o que tivermos da Ookla
+            return@withContext ooklaClientInfo
         }
     }
 
+    /**
+     * LÓGICA DE SELEÇÃO DE SERVIDOR PROFISSIONAL (Estilo WiFiman)
+     * 1. Busca o CATÁLOGO COMPLETO de servidores Ookla (milhares).
+     * 2. Filtra os 20 servidores GEOGRAFICAMENTE mais próximos do usuário.
+     * 3. Adiciona os CDNs globais (Cloudflare, Google, etc) como curingas.
+     * 4. Testa a latência (ping) de TODOS os candidatos em paralelo.
+     * 5. Retorna a lista ordenada pelo menor ping.
+     */
     suspend fun getNearbyServers(clientInfo: ClientInfo): List<SpeedTestServer> = withContext(Dispatchers.IO) {
-        // Etapa 1: Tentar a estratégia profissional primeiro.
-        val ooklaRecommendedServers = fetchOoklaConfigAndServers()
-
-        // Etapa 2: Buscar a lista de CDNs curados em paralelo.
+        // Etapa 1: Obter candidatos de todas as fontes em paralelo
+        // BUSCA A LISTA PROFISSIONAL: Os 20 servidores geograficamente mais próximos
+        val ooklaServersDeferred = async { fetchOoklaFullServerList(clientInfo) }
         val curatedCdnServersDeferred = async { getCuratedCdnServers() }
+
+        val ooklaClosestServers = try { ooklaServersDeferred.await() } catch (e: Exception) { emptyList() }
         val reachableCdnServers = try { curatedCdnServersDeferred.await() } catch (e: Exception) { emptyList() }
 
-        // Etapa 3: Combinar os resultados.
-        val finalServers = (ooklaRecommendedServers + reachableCdnServers).distinctBy { it.downloadUrl }
+        // Etapa 2: Combinar listas
+        val combinedList = (ooklaClosestServers + reachableCdnServers).toMutableList()
+        val uniqueCandidates = combinedList.distinctBy { it.downloadUrl }
 
-        // Etapa 4: Lógica de Fallback Definitiva.
-        // Se a estratégia profissional falhar e não retornar servidores, usamos nosso fallback robusto.
-        if (ooklaRecommendedServers.isEmpty()) {
-            val curatedLocalIspFallback = getCuratedLocalIspServers("BR")
-            val fallbackCandidates = curatedLocalIspFallback.filter { isServerReachable(it) }
-            val top3Fallback = fallbackCandidates
-                .sortedBy { server -> haversineDistance(clientInfo.lat, clientInfo.lon, server.lat, server.lon) }
-                .take(3)
-            return@withContext (top3Fallback + reachableCdnServers).distinctBy { it.downloadUrl }
+        // Etapa 3: Testar a latência de TODOS os candidatos em paralelo
+        val serversWithLatency = uniqueCandidates.map { server ->
+            async {
+                val latency = pingServer(server) // AGORA CHAMA A FUNÇÃO CORRETA
+                Pair(server, latency)
+            }
+        }.map { it.await() } // Espera todos os pings terminarem
+
+        // Etapa 4: Filtrar servidores inacessíveis e ordenar pelo menor ping
+        val sortedServers = serversWithLatency
+            .filter { it.second < 9999 } // Filtra falhas de ping
+            .sortedBy { it.second } // Ordena pelo menor ping
+            .map { it.first } // Pega apenas o objeto SpeedTestServer
+
+        // Se, depois de tudo, a lista estiver vazia (improvável),
+        // retorne a lista original ordenada por geografia como último recurso.
+        if (sortedServers.isEmpty() && uniqueCandidates.isNotEmpty()) {
+            return@withContext uniqueCandidates
+                .sortedBy { haversineDistance(clientInfo.lat, clientInfo.lon, it.lat, it.lon) }
         }
 
-        return@withContext finalServers
+        return@withContext sortedServers
     }
 
-    // MÉTODO PROFISSIONAL: Emula a lógica do Speedtest.net
-    private suspend fun fetchOoklaConfigAndServers(): List<SpeedTestServer> {
+    /**
+     * MÉTODO PROFISSIONAL: Busca o catálogo COMPLETO da Ookla,
+     * ordena por distância e retorna os 20 mais próximos.
+     */
+    private suspend fun fetchOoklaFullServerList(clientInfo: ClientInfo): List<SpeedTestServer> {
         return try {
-            // 1. Obter a configuração do cliente, que informa o IP e o ISP.
-            val configRequest = Request.Builder().url("https://www.speedtest.net/speedtest-config.php").build()
-            val configResponse = client.newCall(configRequest).execute()
-            if (!configResponse.isSuccessful) return emptyList()
-
-            // 2. Com a configuração, solicitar a lista de servidores RECOMENDADOS.
-            val serversRequest = Request.Builder().url("https://www.speedtest.net/speedtest-servers-php.php?threads=4").build()
+            // 1. Obter o catálogo estático completo.
+            val serversRequest = Request.Builder()
+                .url("https://www.speedtest.net/speedtest-servers-static.php")
+                .build()
             val serversResponse = client.newCall(serversRequest).execute()
             if (!serversResponse.isSuccessful) return emptyList()
 
             val xmlBody = serversResponse.body?.string() ?: return emptyList()
-            parseSpeedtestServersXml(xmlBody).take(5) // Pega os 5 melhores servidores recomendados.
+
+            // 2. Parsear a lista inteira
+            val allServers = parseSpeedtestServersXml(xmlBody)
+
+            // 3. Ordenar por distância e pegar os 20 mais próximos
+            return allServers
+                .sortedBy { haversineDistance(clientInfo.lat, clientInfo.lon, it.lat, it.lon) }
+                .take(20)
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
         }
     }
 
+    // Helper para extrair ClientInfo do XML de configuração da Ookla
+    private fun parseClientInfoFromConfig(xml: String): Pair<ClientInfo?, Map<String, String>> {
+        var clientInfo: ClientInfo? = null
+        val configMap = mutableMapOf<String, String>()
+        try {
+            val factory = XmlPullParserFactory.newInstance()
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG && parser.name == "client") {
+                    clientInfo = ClientInfo(
+                        ipAddress = parser.getAttributeValue(null, "ip") ?: "Unknown",
+                        city = "Unknown", // O config não fornece a cidade, mas o ISP sim
+                        country = parser.getAttributeValue(null, "country") ?: "Unknown",
+                        isp = parser.getAttributeValue(null, "isp") ?: "Unknown",
+                        lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0,
+                        lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
+                    )
+                } else if (eventType == XmlPullParser.START_TAG && parser.name == "server-config") {
+                    // Exemplo de como pegar outros dados, se necessário
+                    configMap["threads"] = parser.getAttributeValue(null, "threads") ?: "4"
+                }
+                eventType = parser.next()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return Pair(clientInfo, configMap)
+    }
+
     private fun parseSpeedtestServersXml(xml: String): List<SpeedTestServer> {
         val servers = mutableListOf<SpeedTestServer>()
-        val factory = XmlPullParserFactory.newInstance()
-        val parser = factory.newPullParser()
-        parser.setInput(StringReader(xml))
-        var eventType = parser.eventType
-        while (eventType != XmlPullParser.END_DOCUMENT) {
-            if (eventType == XmlPullParser.START_TAG && parser.name == "server") {
-                val url = parser.getAttributeValue(null, "url")
-                servers.add(
-                    SpeedTestServer(
-                        name = parser.getAttributeValue(null, "sponsor"),
-                        country = parser.getAttributeValue(null, "country"),
-                        city = parser.getAttributeValue(null, "name"),
-                        downloadUrl = url.replace("upload.php", "random4000x4000.jpg"),
-                        uploadUrl = url,
-                        lat = parser.getAttributeValue(null, "lat").toDoubleOrNull() ?: 0.0,
-                        lon = parser.getAttributeValue(null, "lon").toDoubleOrNull() ?: 0.0
-                    )
-                )
+        try {
+            val factory = XmlPullParserFactory.newInstance()
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG && parser.name == "server") {
+                    val url = parser.getAttributeValue(null, "url")
+                    // --- CORREÇÃO DE NULABILIDADE ---
+                    // Só adiciona o servidor se a URL não for nula
+                    if (url != null) {
+                        servers.add(
+                            SpeedTestServer(
+                                name = parser.getAttributeValue(null, "sponsor"),
+                                country = parser.getAttributeValue(null, "country"),
+                                city = parser.getAttributeValue(null, "name"),
+                                downloadUrl = url.replace("upload.php", "random4000x4000.jpg"),
+                                uploadUrl = url,
+                                lat = parser.getAttributeValue(null, "lat").toDoubleOrNull() ?: 0.0,
+                                lon = parser.getAttributeValue(null, "lon").toDoubleOrNull() ?: 0.0
+                            )
+                        )
+                    }
+                    // --- FIM DA CORREÇÃO ---
+                }
+                eventType = parser.next()
             }
-            eventType = parser.next()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
         return servers
     }
 
-    private fun getCuratedLocalIspServers(countryCode: String): List<SpeedTestServer> {
-        if (countryCode != "BR") return emptyList()
-        return listOf(
-            SpeedTestServer("Vivo (SP)", "BR", "Sao Paulo", "http://speedtest.vivo.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://speedtest.vivo.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -23.55, -46.63),
-            SpeedTestServer("Claro (SP)", "BR", "Sao Paulo", "http://spd-tst-sao.claro.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://spd-tst-sao.claro.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -23.55, -46.63),
-            SpeedTestServer("TIM (SP)", "BR", "Sao Paulo", "http://speedtest.tim.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://speedtest.tim.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -23.55, -46.63),
-            SpeedTestServer("Unifique (SC)", "BR", "Timbó", "http://speedtest.unifique.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://speedtest.unifique.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -26.82, -49.27),
-            SpeedTestServer("Claro (SC)", "BR", "Florianopolis", "http://sc.speedtest.claro.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://sc.speedtest.claro.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -27.59, -48.54),
-            SpeedTestServer("Oi Fibra (SC)", "BR", "Florianopolis", "http://speedtest.oi.com.br.prod.hosts.ooklaserver.net:8080/download?size=25000000", "http://speedtest.oi.com.br.prod.hosts.ooklaserver.net:8080/upload.php", -27.59, -48.54)
-        )
-    }
-
     private suspend fun getCuratedCdnServers(): List<SpeedTestServer> = withContext(Dispatchers.IO) {
         val fastComServer = fetchFastComServer()
+        // URL genérica caso os CDNs não tenham um endpoint de upload dedicado
         val genericUploadUrl = "http://speedtest.vivo.com.br.prod.hosts.ooklaserver.net:8080/upload.php"
 
         val cdnList = mutableListOf(
-            SpeedTestServer("Cloudflare CDN", "Global", "Worldwide", "https://speed.cloudflare.com/__down?bytes=100000000", genericUploadUrl),
-            SpeedTestServer("Google CDN", "Global", "Worldwide", "https://storage.googleapis.com/gweb-cloud-storage-geo-testing/1GB.bin", genericUploadUrl)
+            SpeedTestServer("Cloudflare CDN", "Global", "Worldwide", "https://speed.cloudflare.com/__down?bytes=100000000", "https://speed.cloudflare.com/__up", 0.0, 0.0),
+            SpeedTestServer("Google CDN", "Global", "Worldwide", "https://storage.googleapis.com/gweb-cloud-storage-geo-testing/1GB.bin", genericUploadUrl, 0.0, 0.0),
+            // ADICIONADO: Servidor de teste da Akamai
+            SpeedTestServer("Akamai CDN", "Global", "Worldwide", "http://speedtest.akamaized.net/static/images/background.jpg", genericUploadUrl, 0.0, 0.0)
+
         )
 
         fastComServer?.let { cdnList.add(it) }
-        return@withContext cdnList.filter { isServerReachable(it) }
+
+        return@withContext cdnList
     }
 
     private suspend fun fetchFastComServer(): SpeedTestServer? = withContext(Dispatchers.IO) {
@@ -169,7 +269,7 @@ class EnhancedIpInfoService {
             val targets = json.getJSONArray("targets")
             if (targets.length() > 0) {
                 val url = targets.getJSONObject(0).getString("url")
-                return@withContext SpeedTestServer("Netflix (Fast.com)", "Global", "Worldwide", url, url)
+                return@withContext SpeedTestServer("Netflix (Fast.com)", "Global", "Worldwide", url, url, 0.0, 0.0)
             }
             null
         } catch (e: Exception) {
@@ -178,34 +278,75 @@ class EnhancedIpInfoService {
         }
     }
 
-    private suspend fun isServerReachable(server: SpeedTestServer): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder().url(server.downloadUrl).get().build()
-            client.newCall(request).execute().use { it.isSuccessful }
-        } catch (e: Exception) { false }
-    }
-
+    /**
+     * FUNÇÃO DE PING PROFISSIONAL (CORREÇÃO CRÍTICA)
+     * O "ping" (latência) NUNCA deve ser medido contra um arquivo de download grande.
+     * Isso mistura latência (ping) com velocidade (throughput).
+     * O ping real deve ser a requisição mais leve possível.
+     *
+     * Estratégia:
+     * 1. Servidores Ookla: Usamos um 'HEAD' request contra a URL BASE (uploadUrl).
+     * 2. Servidores CDN: Usamos um 'HEAD' request contra a 'downloadUrl' (ou 'bytes=0' para Cloudflare).
+     */
     suspend fun pingServer(server: SpeedTestServer): Int = withContext(Dispatchers.IO) {
         try {
-            val urlForPing = if ("cloudflare" in server.downloadUrl) {
-                server.downloadUrl.replaceAfter("bytes=", "0")
-            } else {
-                server.downloadUrl
-            }
+            val urlForPing: String
 
-            val request = Request.Builder().url(urlForPing).get().build()
+            // --- Determina a URL correta para o PING (com checagem de nulabilidade) ---
+
+            // Caso 1: Cloudflare CDN
+            if (server.downloadUrl?.contains("cloudflare") == true) {
+                // Cloudflare tem um endpoint de download que aceita 'bytes=0' para teste de latência
+                urlForPing = server.downloadUrl!!.replaceAfter("bytes=", "0")
+
+                // Caso 2: Servidores Ookla Padrão
+            } else if (server.uploadUrl?.contains("upload.php") == true) {
+                // Pingar a URL base (upload.php) é o método padrão de latência da Ookla.
+                urlForPing = server.uploadUrl!!
+
+                // Caso 3: Outros CDNs (Google, Akamai, Fast.com)
+            } else if (server.downloadUrl != null) {
+                // Para CDNs, um 'HEAD' request no arquivo de download é a melhor
+                // aproximação de latência, pois eles não têm 'upload.php'.
+                urlForPing = server.downloadUrl!!
+            } else {
+                // Se ambas as URLs forem nulas, não podemos pingar.
+                return@withContext 9999
+            }
+            // --- FIM DAS CORREÇÕES ---
+
+            // --- Executa o PING ---
+
+            val request = Request.Builder()
+                .url(urlForPing)
+                .head() // USA HEAD - Esta é a mudança-chave! Não baixa o corpo.
+                .build()
+
             val pings = mutableListOf<Long>()
+
+            // 3 repetições para uma média de ping mais estável
             repeat(3) {
                 val start = System.currentTimeMillis()
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) pings.add(System.currentTimeMillis() - start)
+                    // O 'code' não precisa ser 200. Um 404, 403 etc.,
+                    // ainda significa que o servidor respondeu e a latência foi medida.
+                    if (response.code != 0) {
+                        pings.add(System.currentTimeMillis() - start)
+                    } else {
+                        // A requisição falhou totalmente (ex: DNS, timeout)
+                        // Não adicione à lista.
+                    }
                 }
             }
             if (pings.isEmpty()) 9999 else pings.average().toInt()
-        } catch (e: Exception) { 9999 }
+        } catch (e: Exception) {
+            // Captura timeouts, DNS failures, etc.
+            9999
+        }
     }
 
     private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        if (lat1 == 0.0 && lon1 == 0.0) return Double.MAX_VALUE // Põe CDNs no fim da lista geográfica
         val r = 6371
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
@@ -214,4 +355,3 @@ class EnhancedIpInfoService {
         return r * c
     }
 }
-

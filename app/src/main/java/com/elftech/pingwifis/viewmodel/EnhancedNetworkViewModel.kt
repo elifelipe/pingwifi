@@ -89,11 +89,19 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 _testMessage.value = "Identificando sua conexão..."
-                val info = ipInfoService.getClientInfo()
-                _clientInfo.value = info
+                var info = ipInfoService.getClientInfo() // Mudei de val para var
+
                 if (info == null) {
+                    _clientInfo.value = null // Garante que está nulo se a info for nula
                     throw Exception("Não foi possível obter informações da sua conexão.")
                 }
+
+                // FIX: Trata o caso onde a cidade é "Unknown"
+                if (info.city.equals("Unknown", ignoreCase = true)) {
+                    info = info.copy(city = "Localização")
+                }
+
+                _clientInfo.value = info // Define o valor (corrigido ou original)
                 delay(200)
 
                 _testMessage.value = "Procurando servidores próximos..."
@@ -114,7 +122,7 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 Log.e("EnhancedNetVM", "Erro na inicialização", e)
                 _testMessage.value = "Erro: ${e.message}"
-                _serverDetails.value = SpeedTestServer("Cloudflare", "Global", "Worldwide", "https://speed.cloudflare.com/__down?bytes=50000000")
+                _serverDetails.value = SpeedTestServer("Cloudflare", "Global", "Worldwide", "https://speed.cloudflare.com/__down?bytes=50000000", "https://speed.cloudflare.com/__up")
             } finally {
                 _isLoadingServers.value = false
             }
@@ -296,4 +304,3 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
         stopTest()
     }
 }
-
