@@ -46,7 +46,7 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
     }
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Velocidade", "Ping", "Diagnóstico")
+    val tabs = listOf("Velocidade", "Ping", "Rede", "Diagnóstico")
 
     Scaffold {padding ->
         Column(modifier = Modifier.padding(padding)) {
@@ -60,7 +60,8 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                             when (index) {
                                 0 -> Icon(Icons.Filled.Speed, contentDescription = title)
                                 1 -> Icon(Icons.Filled.NetworkPing, contentDescription = title)
-                                2 -> Icon(Icons.Filled.Search, contentDescription = title)
+                                2 -> Icon(Icons.Filled.Devices, contentDescription = title)
+                                3 -> Icon(Icons.Filled.Search, contentDescription = title)
                             }
                         }
                     )
@@ -95,7 +96,17 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                     onStartPing = { host, count -> vm.startPingTest(host, count) },
                     onStopPing = { vm.stopPingTest() }
                 )
-                2 -> EnhancedDiagnosisTab(
+                2 -> NetworkScannerScreen(
+                    scanState = vm.networkScan.collectAsState().value,
+                    onStartScan = { vm.startNetworkScan() },
+                    onStopScan = { vm.stopNetworkScan() },
+                    onDeviceClick = { device ->
+                        // Atualiza o ping host e vai para aba de ping
+                        vm.updatePingHost(device.ipAddress)
+                        selectedTab = 1
+                    }
+                )
+                3 -> EnhancedDiagnosisTab(
                     traceState = trace,
                     onRunTraceroute = { host -> vm.runTraceroute(host) }
                 )

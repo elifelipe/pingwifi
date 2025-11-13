@@ -50,6 +50,14 @@ data class ExtendedSpeedTestState(
     val uploadSpeedSamples: List<Double> = emptyList()
 )
 
+data class NetworkScanState(
+    val status: RunStatus = RunStatus.IDLE,
+    val devices: List<com.elftech.pingwifis.data.NetworkDevice> = emptyList(),
+    val progress: Int = 0,
+    val error: String? = null,
+    val scanningDevice: com.elftech.pingwifis.data.NetworkDevice? = null
+)
+
 data class TracerouteState(
     val status: RunStatus = RunStatus.IDLE,
     val lines: List<String> = emptyList(),

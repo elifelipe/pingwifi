@@ -19,6 +19,12 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val speedRunner = ImprovedSpeedTestRunner(viewModelScope)
     private val traceRunner = TracerouteRunner(viewModelScope)
     private val pingRunner = PingTestRunner(viewModelScope)
+
+    private val networkScanner = NetworkScanner(viewModelScope)
+
+    private val _networkScan = MutableStateFlow(NetworkScanState())
+    val networkScan: StateFlow<NetworkScanState> = _networkScan.asStateFlow()
+
     private val ipInfoService = EnhancedIpInfoService()
     private val connectionManager = ConnectionStatusManager(app.applicationContext)
 
@@ -75,6 +81,92 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    fun startNetworkScan() {
+        if (!_connectionStatus.value.isConnected) {
+            _networkScan.value = NetworkScanState(
+                status = RunStatus.ERROR,
+                error = "Sem conexão à internet"
+            )
+            return
+        }
+
+        // Obtém o prefixo da rede atual
+        val wifiInfo = _wifi.value
+        val networkPrefix = getNetworkPrefix()
+
+        if (networkPrefix == null) {
+            _networkScan.value = NetworkScanState(
+                status = RunStatus.ERROR,
+                error = "Não foi possível determinar a rede local"
+            )
+            return
+        }
+
+        _networkScan.value = NetworkScanState(status = RunStatus.RUNNING, devices = emptyList())
+
+        networkScanner.startNetworkScan(
+            networkPrefix = networkPrefix,
+            onProgress = { progress, device ->
+                _networkScan.value = _networkScan.value.copy(
+                    progress = progress,
+                    scanningDevice = device,
+                    devices = if (device != null && !_networkScan.value.devices.any { it.ipAddress == device.ipAddress }) {
+                        _networkScan.value.devices + device
+                    } else {
+                        _networkScan.value.devices
+                    }
+                )
+            },
+            onComplete = { devices ->
+                _networkScan.value = NetworkScanState(
+                    status = RunStatus.DONE,
+                    devices = devices,
+                    progress = 100
+                )
+            },
+            onError = { error ->
+                _networkScan.value = NetworkScanState(
+                    status = RunStatus.ERROR,
+                    error = error
+                )
+            }
+        )
+    }
+
+    fun stopNetworkScan() {
+        networkScanner.stopScan()
+        if (_networkScan.value.status == RunStatus.RUNNING) {
+            _networkScan.value = _networkScan.value.copy(status = RunStatus.IDLE)
+        }
+    }
+
+    private fun getNetworkPrefix(): String? {
+        return try {
+            val ctx = getApplication<Application>().applicationContext
+            val wifi = android.net.wifi.WifiManager::class.java.cast(
+                ctx.getSystemService(android.content.Context.WIFI_SERVICE)
+            )
+
+            val dhcpInfo = wifi?.dhcpInfo
+            if (dhcpInfo != null) {
+                val ip = dhcpInfo.ipAddress
+                val ipStr = String.format(
+                    "%d.%d.%d",
+                    ip and 0xff,
+                    ip shr 8 and 0xff,
+                    ip shr 16 and 0xff
+                )
+                ipStr
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("EnhancedNetVM", "Failed to get network prefix", e)
+            null
+        }
+    }
+
 
     private fun initializeApp() {
         viewModelScope.launch {
@@ -357,5 +449,6 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         super.onCleared()
         stopTest()
+        networkScanner.stopScan()
     }
 }
