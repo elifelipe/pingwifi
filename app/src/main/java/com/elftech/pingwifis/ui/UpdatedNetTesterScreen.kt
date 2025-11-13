@@ -27,6 +27,7 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
     val extendedSpeed by vm.extendedSpeed.collectAsState()
     val wifi by vm.wifi.collectAsState()
     val trace by vm.trace.collectAsState()
+    val ping by vm.ping.collectAsState()
     val serverDetails by vm.serverDetails.collectAsState()
     val clientInfo by vm.clientInfo.collectAsState()
     val isLoadingServers by vm.isLoadingServers.collectAsState()
@@ -45,12 +46,9 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
     }
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Velocidade", "Diagnóstico")
+    val tabs = listOf("Velocidade", "Ping", "Diagnóstico")
 
-    Scaffold(
-        // A TopAppBar foi removida daqui para evitar redundância,
-        // já que o ModernSpeedTestScreen tem seu próprio cabeçalho.
-    ) { padding ->
+    Scaffold {padding ->
         Column(modifier = Modifier.padding(padding)) {
             TabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, title ->
@@ -61,7 +59,8 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                         icon = {
                             when (index) {
                                 0 -> Icon(Icons.Filled.Speed, contentDescription = title)
-                                1 -> Icon(Icons.Filled.Search, contentDescription = title)
+                                1 -> Icon(Icons.Filled.NetworkPing, contentDescription = title)
+                                2 -> Icon(Icons.Filled.Search, contentDescription = title)
                             }
                         }
                     )
@@ -86,7 +85,17 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                     uploadSpeedSamples = extendedSpeed.uploadSpeedSamples,
                     onStartTest = { vm.startSpeedTest() }
                 )
-                1 -> EnhancedDiagnosisTab(
+                1 -> ModernPingTestScreen(
+                    pingHost = ping.host,
+                    onHostChange = { vm.updatePingHost(it) },
+                    pingResults = ping.results,
+                    pingSummary = ping.summary,
+                    status = ping.status,
+                    error = ping.error,
+                    onStartPing = { host, count -> vm.startPingTest(host, count) },
+                    onStopPing = { vm.stopPingTest() }
+                )
+                2 -> EnhancedDiagnosisTab(
                     traceState = trace,
                     onRunTraceroute = { host -> vm.runTraceroute(host) }
                 )
@@ -94,7 +103,6 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
         }
     }
 }
-
 
 @Composable
 fun EnhancedDiagnosisTab(

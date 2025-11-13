@@ -4,11 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.elftech.pingwifis.data.ConnectionStatusManager
-import com.elftech.pingwifis.data.EnhancedIpInfoService
-import com.elftech.pingwifis.data.ImprovedSpeedTestRunner
-import com.elftech.pingwifis.data.TracerouteRunner
-import com.elftech.pingwifis.data.WifiInfoReader
+import com.elftech.pingwifis.data.*
 import com.elftech.pingwifis.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -22,6 +18,7 @@ import kotlin.math.roundToInt
 class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val speedRunner = ImprovedSpeedTestRunner(viewModelScope)
     private val traceRunner = TracerouteRunner(viewModelScope)
+    private val pingRunner = PingTestRunner(viewModelScope)
     private val ipInfoService = EnhancedIpInfoService()
     private val connectionManager = ConnectionStatusManager(app.applicationContext)
 
@@ -33,6 +30,9 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _trace = MutableStateFlow(TracerouteState())
     val trace: StateFlow<TracerouteState> = _trace.asStateFlow()
+
+    private val _ping = MutableStateFlow(PingTestState())
+    val ping: StateFlow<PingTestState> = _ping.asStateFlow()
 
     private val _serverDetails = MutableStateFlow<SpeedTestServer?>(null)
     val serverDetails: StateFlow<SpeedTestServer?> = _serverDetails.asStateFlow()
@@ -89,19 +89,18 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 _testMessage.value = "Identificando sua conexão..."
-                var info = ipInfoService.getClientInfo() // Mudei de val para var
+                var info = ipInfoService.getClientInfo()
 
                 if (info == null) {
-                    _clientInfo.value = null // Garante que está nulo se a info for nula
+                    _clientInfo.value = null
                     throw Exception("Não foi possível obter informações da sua conexão.")
                 }
 
-                // FIX: Trata o caso onde a cidade é "Unknown"
                 if (info.city.equals("Unknown", ignoreCase = true)) {
                     info = info.copy(city = "Localização")
                 }
 
-                _clientInfo.value = info // Define o valor (corrigido ou original)
+                _clientInfo.value = info
                 delay(200)
 
                 _testMessage.value = "Procurando servidores próximos..."
@@ -179,7 +178,6 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             try {
-                // Reseta o estado para um novo teste, limpando ambas as listas de amostras
                 _extendedSpeed.value = ExtendedSpeedTestState(
                     status = RunStatus.RUNNING,
                     currentPhase = TestPhase.PING,
@@ -280,6 +278,7 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     fun stopTest() {
         speedRunner.stop()
         traceRunner.stop()
+        pingRunner.stop()
     }
 
     fun runTraceroute(host: String, maxHops: Int = 30) {
@@ -289,6 +288,62 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
             { _trace.value = _trace.value.copy(status = RunStatus.DONE) },
             { err -> _trace.value = _trace.value.copy(status = RunStatus.ERROR, error = err) }
         )
+    }
+
+    // NOVO: Funções para o Ping Test
+    fun updatePingHost(host: String) {
+        _ping.value = _ping.value.copy(host = host)
+    }
+
+    fun startPingTest(host: String, count: Int = 10) {
+        if (!_connectionStatus.value.isConnected) {
+            _ping.value = _ping.value.copy(status = RunStatus.ERROR, error = "Sem conexão à internet")
+            return
+        }
+
+        if (host.isBlank()) {
+            _ping.value = _ping.value.copy(status = RunStatus.ERROR, error = "Digite um endereço válido")
+            return
+        }
+
+        // Reseta o estado
+        _ping.value = PingTestState(
+            status = RunStatus.RUNNING,
+            host = host,
+            results = emptyList(),
+            summary = null,
+            error = null
+        )
+
+        pingRunner.runPingTest(
+            host = host,
+            count = count,
+            onProgress = { result ->
+                val currentResults = _ping.value.results
+                _ping.value = _ping.value.copy(
+                    results = currentResults + result
+                )
+            },
+            onComplete = { summary ->
+                _ping.value = _ping.value.copy(
+                    status = RunStatus.DONE,
+                    summary = summary
+                )
+            },
+            onError = { error ->
+                _ping.value = _ping.value.copy(
+                    status = RunStatus.ERROR,
+                    error = error
+                )
+            }
+        )
+    }
+
+    fun stopPingTest() {
+        pingRunner.stop()
+        if (_ping.value.status == RunStatus.RUNNING) {
+            _ping.value = _ping.value.copy(status = RunStatus.IDLE)
+        }
     }
 
     fun changeServer(server: SpeedTestServer) {

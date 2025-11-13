@@ -56,3 +56,10 @@ data class TracerouteState(
     val error: String? = null
 )
 
+data class PingTestState(
+    val status: RunStatus = RunStatus.IDLE,
+    val host: String = "8.8.8.8",
+    val results: List<com.elftech.pingwifis.data.PingResult> = emptyList(),
+    val summary: com.elftech.pingwifis.data.PingSummary? = null,
+    val error: String? = null
+)
