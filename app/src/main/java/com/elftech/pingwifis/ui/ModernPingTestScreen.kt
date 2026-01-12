@@ -15,8 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -29,6 +27,7 @@ import com.elftech.pingwifis.data.PingStatus
 import com.elftech.pingwifis.data.PingSummary
 import com.elftech.pingwifis.data.model.RunStatus
 import kotlinx.coroutines.delay
+import androidx.compose.material3.surfaceColorAtElevation
 
 @Composable
 fun ModernPingTestScreen(
@@ -41,6 +40,7 @@ fun ModernPingTestScreen(
     onStartPing: (String, Int) -> Unit,
     onStopPing: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
     var pingCount by remember { mutableStateOf("10") }
     val listState = rememberLazyListState()
 
@@ -54,15 +54,6 @@ fun ModernPingTestScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
-                        Color(0xFF0F172A)
-                    )
-                )
-            )
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -96,7 +87,7 @@ fun ModernPingTestScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFEF4444).copy(alpha = 0.2f)
+                    containerColor = colors.errorContainer
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -108,11 +99,11 @@ fun ModernPingTestScreen(
                     Icon(
                         Icons.Default.Error,
                         contentDescription = null,
-                        tint = Color(0xFFEF4444)
+                        tint = colors.error
                     )
                     Text(
                         text = errorMsg,
-                        color = Color(0xFFFECDD3),
+                        color = colors.onErrorContainer,
                         fontSize = 14.sp
                     )
                 }
@@ -123,12 +114,12 @@ fun ModernPingTestScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .shadow(8.dp, RoundedCornerShape(20.dp)),
+                .weight(1f),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-            )
+                containerColor = colors.surfaceColorAtElevation(2.dp)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -140,7 +131,7 @@ fun ModernPingTestScreen(
                         "Resultados do Ping",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        color = colors.onSurface
                     )
                     if (status == RunStatus.RUNNING) {
                         Row(
@@ -150,12 +141,12 @@ fun ModernPingTestScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
-                                color = Color(0xFF3B82F6)
+                                color = colors.primary
                             )
                             Text(
                                 "Testando...",
                                 fontSize = 12.sp,
-                                color = Color(0xFF94A3B8)
+                                color = colors.onSurfaceVariant
                             )
                         }
                     }
@@ -176,12 +167,12 @@ fun ModernPingTestScreen(
                                 Icons.Default.NetworkPing,
                                 contentDescription = null,
                                 modifier = Modifier.size(64.dp),
-                                tint = Color(0xFF475569)
+                                tint = colors.outline
                             )
                             Text(
                                 "Digite um endereço e clique em \"Iniciar Ping\"",
                                 fontSize = 14.sp,
-                                color = Color(0xFF94A3B8),
+                                color = colors.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -204,6 +195,8 @@ fun ModernPingTestScreen(
 
 @Composable
 private fun PingTestHeader() {
+    val colors = MaterialTheme.colorScheme
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -212,15 +205,14 @@ private fun PingTestHeader() {
         Icon(
             Icons.Default.NetworkPing,
             contentDescription = null,
-            tint = Color(0xFF10B981),
+            tint = colors.secondary,
             modifier = Modifier.size(28.dp)
         )
         Spacer(Modifier.width(12.dp))
         Text(
             text = "Teste de Ping",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            style = MaterialTheme.typography.headlineSmall,
+            color = colors.onBackground
         )
     }
 }
@@ -235,14 +227,15 @@ private fun PingInputSection(
     onStartPing: () -> Unit,
     onStopPing: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-        )
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -261,13 +254,13 @@ private fun PingInputSection(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF3B82F6),
-                    unfocusedBorderColor = Color(0xFF475569),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color(0xFFF1F5F9),
-                    disabledTextColor = Color(0xFF64748B),
-                    focusedLabelColor = Color(0xFF3B82F6),
-                    unfocusedLabelColor = Color(0xFF94A3B8)
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.outline,
+                    focusedTextColor = colors.onSurface,
+                    unfocusedTextColor = colors.onSurface,
+                    disabledTextColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary,
+                    unfocusedLabelColor = colors.onSurfaceVariant
                 ),
                 singleLine = true
             )
@@ -285,18 +278,20 @@ private fun PingInputSection(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF3B82F6),
-                    unfocusedBorderColor = Color(0xFF475569),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color(0xFFF1F5F9),
-                    disabledTextColor = Color(0xFF64748B),
-                    focusedLabelColor = Color(0xFF3B82F6),
-                    unfocusedLabelColor = Color(0xFF94A3B8)
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.outline,
+                    focusedTextColor = colors.onSurface,
+                    unfocusedTextColor = colors.onSurface,
+                    disabledTextColor = colors.onSurfaceVariant,
+                    focusedLabelColor = colors.primary,
+                    unfocusedLabelColor = colors.onSurfaceVariant
                 ),
                 singleLine = true
             )
 
-            // Action Button
+    // Action Button
+            val buttonContainer = if (status == RunStatus.RUNNING) colors.error else colors.secondary
+            val buttonContent = if (status == RunStatus.RUNNING) colors.onError else colors.onSecondary
             Button(
                 onClick = {
                     if (status == RunStatus.RUNNING) {
@@ -307,13 +302,13 @@ private fun PingInputSection(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .shadow(12.dp, CircleShape),
+                    .height(56.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (status == RunStatus.RUNNING) Color(0xFFEF4444) else Color(0xFF10B981),
-                    contentColor = Color.White
-                )
+                    containerColor = buttonContainer,
+                    contentColor = buttonContent
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
             ) {
                 if (status == RunStatus.RUNNING) {
                     Icon(Icons.Default.Stop, contentDescription = null)
@@ -331,21 +326,22 @@ private fun PingInputSection(
 
 @Composable
 private fun PingSummaryCard(summary: PingSummary) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-        )
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 "Estatísticas",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = colors.onSurface,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
@@ -358,14 +354,14 @@ private fun PingSummaryCard(summary: PingSummary) {
                     label = "Enviados",
                     value = "${summary.packetsTransmitted}",
                     icon = Icons.Default.Send,
-                    color = Color(0xFF3B82F6),
+                    color = colors.primary,
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     label = "Recebidos",
                     value = "${summary.packetsReceived}",
                     icon = Icons.Default.CheckCircle,
-                    color = Color(0xFF10B981),
+                    color = colors.secondary,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -380,27 +376,27 @@ private fun PingSummaryCard(summary: PingSummary) {
                     label = "Perda",
                     value = "${summary.packetLossPercent}%",
                     icon = Icons.Default.ErrorOutline,
-                    color = if (summary.packetLossPercent > 0) Color(0xFFEF4444) else Color(0xFF10B981),
+                    color = if (summary.packetLossPercent > 0) colors.error else colors.secondary,
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     label = "Jitter",
                     value = "${summary.jitterMs}ms",
                     icon = Icons.Default.ShowChart,
-                    color = Color(0xFF8B5CF6),
+                    color = colors.tertiary,
                     modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = Color(0xFF334155))
+            HorizontalDivider(color = colors.outlineVariant)
             Spacer(modifier = Modifier.height(16.dp))
 
             // Latência
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                LatencyRow("Mínima", summary.minLatencyMs, Color(0xFF10B981))
-                LatencyRow("Média", summary.avgLatencyMs, Color(0xFF3B82F6))
-                LatencyRow("Máxima", summary.maxLatencyMs, Color(0xFFEF4444))
+                LatencyRow("Mínima", summary.minLatencyMs, colors.secondary)
+                LatencyRow("Média", summary.avgLatencyMs, colors.primary)
+                LatencyRow("Máxima", summary.maxLatencyMs, colors.error)
             }
         }
     }
@@ -414,6 +410,8 @@ private fun StatCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
         modifier = modifier.height(90.dp),
         shape = RoundedCornerShape(16.dp),
@@ -434,8 +432,8 @@ private fun StatCard(
             ) {
                 Text(
                     text = label,
-                    fontSize = 12.sp,
-                    color = Color(0xFF94A3B8),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
                 Icon(
@@ -449,7 +447,7 @@ private fun StatCard(
                 text = value,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = colors.onSurface
             )
         }
     }
@@ -457,6 +455,8 @@ private fun StatCard(
 
 @Composable
 private fun LatencyRow(label: String, value: Int, color: Color) {
+    val colors = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -474,32 +474,37 @@ private fun LatencyRow(label: String, value: Int, color: Color) {
             Text(
                 text = label,
                 fontSize = 14.sp,
-                color = Color(0xFF94A3B8)
+                color = colors.onSurfaceVariant
             )
         }
         Text(
             text = "${value}ms",
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White
+            color = colors.onSurface
         )
     }
 }
 
 @Composable
 private fun PingResultItem(result: PingResult) {
+    val colors = MaterialTheme.colorScheme
+    val successColor = colors.secondary
+    val warningColor = colors.error
+    val infoColor = colors.primary
+
     val backgroundColor = when (result.status) {
-        PingStatus.SUCCESS -> Color(0xFF10B981).copy(alpha = 0.1f)
-        PingStatus.TIMEOUT -> Color(0xFFEF4444).copy(alpha = 0.1f)
-        PingStatus.ERROR -> Color(0xFFEF4444).copy(alpha = 0.1f)
-        PingStatus.RESOLVING, PingStatus.RESOLVED -> Color(0xFF3B82F6).copy(alpha = 0.1f)
+        PingStatus.SUCCESS -> successColor.copy(alpha = 0.12f)
+        PingStatus.TIMEOUT -> warningColor.copy(alpha = 0.12f)
+        PingStatus.ERROR -> warningColor.copy(alpha = 0.12f)
+        PingStatus.RESOLVING, PingStatus.RESOLVED -> infoColor.copy(alpha = 0.12f)
     }
 
     val iconColor = when (result.status) {
-        PingStatus.SUCCESS -> Color(0xFF10B981)
-        PingStatus.TIMEOUT -> Color(0xFFEF4444)
-        PingStatus.ERROR -> Color(0xFFEF4444)
-        PingStatus.RESOLVING, PingStatus.RESOLVED -> Color(0xFF3B82F6)
+        PingStatus.SUCCESS -> successColor
+        PingStatus.TIMEOUT -> warningColor
+        PingStatus.ERROR -> warningColor
+        PingStatus.RESOLVING, PingStatus.RESOLVED -> infoColor
     }
 
     val icon = when (result.status) {
@@ -533,7 +538,7 @@ private fun PingResultItem(result: PingResult) {
                 text = result.message,
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
-                color = Color.White,
+                color = colors.onSurface,
                 modifier = Modifier.weight(1f)
             )
         }

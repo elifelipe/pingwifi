@@ -16,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -30,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.elftech.pingwifis.data.model.*
 import kotlinx.coroutines.delay
 import kotlin.math.max
+import androidx.compose.material3.surfaceColorAtElevation
 
 @Composable
 fun ModernSpeedTestScreen(
@@ -59,75 +59,58 @@ fun ModernSpeedTestScreen(
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
-                        Color(0xFF0F172A)
-                    )
-                )
-            )
+            .verticalScroll(scrollState)
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
+        ModernSpeedGauge(
+            status = status,
+            testPhase = testPhase,
+            downloadSpeed = downloadMbps,
+            uploadSpeed = uploadMbps,
+            progress = progress
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        SpeedTestGraph(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Header agora precisa do "isLoadingServers"
-            ModernHeader(clientInfo, isLoadingServers)
-            Spacer(modifier = Modifier.height(24.dp))
-            ModernSpeedGauge(
-                status = status,
-                testPhase = testPhase,
-                downloadSpeed = downloadMbps,
-                uploadSpeed = uploadMbps,
-                progress = progress
+                .fillMaxWidth()
+                .height(120.dp),
+            downloadSamples = downloadSpeedSamples,
+            uploadSamples = uploadSpeedSamples,
+            status = status,
+            phase = testPhase
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        ModernMetricsGrid(
+            pingMs = pingMs,
+            jitterMs = jitterMs,
+            downloadMbps = downloadMbps,
+            uploadMbps = uploadMbps,
+            status = status,
+            testPhase = testPhase
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        ModernActionButton(status = status, onStartTest = onStartTest)
+        error?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 12.dp),
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            SpeedTestGraph(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                downloadSamples = downloadSpeedSamples,
-                uploadSamples = uploadSpeedSamples,
-                status = status,
-                phase = testPhase
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            ModernMetricsGrid(
-                pingMs = pingMs,
-                jitterMs = jitterMs,
-                downloadMbps = downloadMbps,
-                uploadMbps = uploadMbps,
-                status = status,
-                testPhase = testPhase
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            ModernActionButton(status = status, onStartTest = onStartTest)
-            error?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = it,
-                    color = Color(0xFFEF4444),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 12.dp),
-                    textAlign = TextAlign.Center
-                )
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            // Connection card não precisa mais do "onChangeServer"
-            ModernConnectionCard(
-                clientInfo = clientInfo,
-                serverDetails = serverDetails,
-                wifiData = wifiData
-            )
-            Spacer(modifier = Modifier.height(80.dp))
         }
+        Spacer(modifier = Modifier.height(24.dp))
+        // Connection card não precisa mais do "onChangeServer"
+        ModernConnectionCard(
+            clientInfo = clientInfo,
+            serverDetails = serverDetails,
+            wifiData = wifiData
+        )
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
@@ -142,8 +125,8 @@ fun SpeedTestGraph(
 ) {
     Box(modifier = modifier) {
         // Cores para cada tipo de teste
-        val downloadColor = Color(0xFF10B981)
-        val uploadColor = Color(0xFF3B82F6)
+        val downloadColor = MaterialTheme.colorScheme.secondary
+        val uploadColor = MaterialTheme.colorScheme.primary
 
         // Determina o valor máximo para normalizar a altura do gráfico
         val maxDownload = downloadSamples.maxOrNull() ?: 0.0
@@ -222,61 +205,6 @@ internal fun GraphPath( // Removido 'private' para 'internal' (ou sem modificado
         }
     }
 }
-
-
-@Composable
-fun ModernHeader(clientInfo: ClientInfo?, isLoading: Boolean) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                Icons.Default.Wifi,
-                contentDescription = null,
-                tint = Color(0xFF3B82F6),
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = "PingWiFi",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-
-        // Restaura o indicador de carregamento
-        if (isLoading) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = Color(0xFF60A5FA)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Detectando servidor ideal...",
-                    fontSize = 13.sp,
-                    color = Color(0xFF94A3B8)
-                )
-            }
-        } else {
-            clientInfo?.let {
-                Text(
-                    text = "${it.city}, ${it.country}",
-                    fontSize = 14.sp,
-                    color = Color(0xFF94A3B8)
-                )
-            }
-        }
-    }
-}
-
 @Composable
 fun ModernSpeedGauge(
     status: RunStatus,
@@ -285,6 +213,10 @@ fun ModernSpeedGauge(
     uploadSpeed: Double,
     progress: Float
 ) {
+    val colors = MaterialTheme.colorScheme
+    val downloadColor = colors.secondary
+    val uploadColor = colors.primary
+
     val displaySpeed = when (testPhase) {
         TestPhase.DOWNLOAD -> downloadSpeed
         TestPhase.UPLOAD -> uploadSpeed
@@ -322,9 +254,8 @@ fun ModernSpeedGauge(
                     TestPhase.COMPLETED -> "Teste Concluído"
                     else -> "Aguardando"
                 },
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF60A5FA)
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.primary
             )
         }
         Spacer(Modifier.height(24.dp))
@@ -346,8 +277,8 @@ fun ModernSpeedGauge(
                 progress = { animatedRingProgress },
                 modifier = Modifier.fillMaxSize(),
                 strokeWidth = 16.dp,
-                trackColor = Color(0xFF1E293B),
-                color = if (testPhase == TestPhase.UPLOAD) Color(0xFF3B82F6) else Color(0xFF10B981),
+                trackColor = colors.surfaceVariant,
+                color = if (testPhase == TestPhase.UPLOAD) uploadColor else downloadColor,
                 strokeCap = StrokeCap.Round
             )
 
@@ -359,13 +290,13 @@ fun ModernSpeedGauge(
                     text = String.format("%.1f", animatedSpeed.coerceAtLeast(0f)),
                     fontSize = 72.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = colors.onBackground
                 )
                 Text(
                     text = "Mbps",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Light,
-                    color = Color(0xFFCBD5E1)
+                    color = colors.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
                 AnimatedVisibility(
@@ -376,7 +307,7 @@ fun ModernSpeedGauge(
                     Icon(
                         if (testPhase == TestPhase.UPLOAD) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                         contentDescription = null,
-                        tint = if (testPhase == TestPhase.UPLOAD) Color(0xFF3B82F6) else Color(0xFF10B981),
+                        tint = if (testPhase == TestPhase.UPLOAD) uploadColor else downloadColor,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -394,6 +325,8 @@ fun ModernMetricsGrid(
     status: RunStatus,
     testPhase: TestPhase
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -404,7 +337,7 @@ fun ModernMetricsGrid(
                 value = "$pingMs",
                 unit = "ms",
                 icon = Icons.Default.Timer,
-                color = Color(0xFF8B5CF6),
+                color = colors.tertiary,
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -413,7 +346,7 @@ fun ModernMetricsGrid(
                 value = "$jitterMs",
                 unit = "ms",
                 icon = Icons.Default.NetworkCheck,
-                color = Color(0xFFEC4899),
+                color = colors.primary,
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.PING,
                 modifier = Modifier.weight(1f)
             )
@@ -427,7 +360,7 @@ fun ModernMetricsGrid(
                 value = String.format("%.1f", downloadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowDownward,
-                color = Color(0xFF10B981),
+                color = colors.secondary,
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.DOWNLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -436,7 +369,7 @@ fun ModernMetricsGrid(
                 value = String.format("%.1f", uploadMbps),
                 unit = "Mbps",
                 icon = Icons.Default.ArrowUpward,
-                color = Color(0xFF3B82F6),
+                color = colors.primary,
                 isLoading = status == RunStatus.RUNNING && testPhase == TestPhase.UPLOAD,
                 modifier = Modifier.weight(1f)
             )
@@ -454,14 +387,16 @@ fun ModernMetricCard(
     isLoading: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
         modifier = modifier
-            .height(110.dp)
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+            .height(110.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-        )
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -474,7 +409,12 @@ fun ModernMetricCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = label, fontSize = 13.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.Medium)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
                 Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
             }
 
@@ -486,8 +426,18 @@ fun ModernMetricCard(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(text = unit, fontSize = 14.sp, color = Color(0xFF94A3B8), modifier = Modifier.padding(bottom = 4.dp))
+                        Text(
+                            text = value,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.onSurface
+                        )
+                        Text(
+                            text = unit,
+                            fontSize = 14.sp,
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
                 }
             }
@@ -497,6 +447,7 @@ fun ModernMetricCard(
 
 @Composable
 fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
     val buttonText = when (status) {
         RunStatus.RUNNING -> "Testando"
         RunStatus.DONE -> "Testar Novamente"
@@ -509,19 +460,20 @@ fun ModernActionButton(status: RunStatus, onStartTest: () -> Unit) {
         enabled = status != RunStatus.RUNNING,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .shadow(12.dp, CircleShape),
+            .height(56.dp),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF3B82F6),
-            contentColor = Color.White,
-            disabledContainerColor = Color(0xFF475569)
-        )
+            containerColor = colors.primary,
+            contentColor = colors.onPrimary,
+            disabledContainerColor = colors.surfaceVariant,
+            disabledContentColor = colors.onSurfaceVariant
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
     ) {
         if (status == RunStatus.RUNNING) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
-                color = Color.White,
+                color = colors.onPrimary,
                 strokeWidth = 2.5.dp
             )
             Spacer(Modifier.width(12.dp))
@@ -540,13 +492,15 @@ fun ModernConnectionCard(
     wifiData: WifiInfoData
 ) {
     var expanded by remember { mutableStateOf(true) }
+    val colors = MaterialTheme.colorScheme
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B).copy(alpha = 0.8f))
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -556,10 +510,16 @@ fun ModernConnectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Detalhes da Conexão", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                Text(
+                    "Detalhes da Conexão",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onSurface
+                )
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = "Toggle", tint = Color(0xFF94A3B8)
+                    contentDescription = "Toggle",
+                    tint = colors.onSurfaceVariant
                 )
             }
 
@@ -586,6 +546,8 @@ fun ModernConnectionCard(
 
 @Composable
 fun ModernInfoRow(icon: ImageVector, label: String, value: String, showDivider: Boolean) {
+    val colors = MaterialTheme.colorScheme
+
     Column {
         Row(
             modifier = Modifier
@@ -593,15 +555,29 @@ fun ModernInfoRow(icon: ImageVector, label: String, value: String, showDivider: 
                 .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(20.dp)
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, fontSize = 12.sp, color = Color(0xFF94A3B8))
-                Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.onSurface
+                )
             }
         }
         if (showDivider) {
-            HorizontalDivider(color = Color(0xFF334155), thickness = 1.dp)
+            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
         }
     }
 }

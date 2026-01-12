@@ -15,8 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -29,6 +27,7 @@ import com.elftech.pingwifis.data.DeviceType
 import com.elftech.pingwifis.data.NetworkDevice
 import com.elftech.pingwifis.data.model.NetworkScanState
 import com.elftech.pingwifis.data.model.RunStatus
+import androidx.compose.material3.surfaceColorAtElevation
 
 @Composable
 fun NetworkScannerScreen(
@@ -37,18 +36,11 @@ fun NetworkScannerScreen(
     onStopScan: () -> Unit,
     onDeviceClick: (NetworkDevice) -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
-                        Color(0xFF0F172A)
-                    )
-                )
-            )
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -73,12 +65,12 @@ fun NetworkScannerScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .shadow(8.dp, RoundedCornerShape(20.dp)),
+                .weight(1f),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-            )
+                containerColor = colors.surfaceColorAtElevation(2.dp)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -90,7 +82,7 @@ fun NetworkScannerScreen(
                         "Dispositivos Encontrados",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        color = colors.onSurface
                     )
 
                     if (scanState.status == RunStatus.RUNNING) {
@@ -101,12 +93,12 @@ fun NetworkScannerScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
-                                color = Color(0xFF3B82F6)
+                                color = colors.primary
                             )
                             Text(
                                 "${scanState.progress}%",
                                 fontSize = 12.sp,
-                                color = Color(0xFF94A3B8)
+                                color = colors.onSurfaceVariant
                             )
                         }
                     }
@@ -135,6 +127,7 @@ fun NetworkScannerScreen(
 
 @Composable
 private fun NetworkScanHeader() {
+    val colors = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -143,15 +136,14 @@ private fun NetworkScanHeader() {
         Icon(
             Icons.Default.Devices,
             contentDescription = null,
-            tint = Color(0xFF8B5CF6),
+            tint = colors.tertiary,
             modifier = Modifier.size(28.dp)
         )
         Spacer(Modifier.width(12.dp))
         Text(
             text = "Scanner de Rede",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            style = MaterialTheme.typography.headlineSmall,
+            color = colors.onBackground
         )
     }
 }
@@ -164,14 +156,15 @@ private fun NetworkScanControlCard(
     onStartScan: () -> Unit,
     onStopScan: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(20.dp)),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B).copy(alpha = 0.8f)
-        )
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -187,14 +180,14 @@ private fun NetworkScanControlCard(
                         label = "Progresso",
                         value = "$progress%",
                         icon = Icons.Default.Speed,
-                        color = Color(0xFF3B82F6),
+                        color = colors.primary,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         label = "Dispositivos",
                         value = "$devicesFound",
                         icon = Icons.Default.Devices,
-                        color = Color(0xFF10B981),
+                        color = colors.secondary,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -208,14 +201,14 @@ private fun NetworkScanControlCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp),
-                        color = Color(0xFF3B82F6),
-                        trackColor = Color(0xFF334155),
+                        color = colors.primary,
+                        trackColor = colors.outlineVariant,
                         strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                     )
                     Text(
                         "Escaneando rede local...",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -233,14 +226,14 @@ private fun NetworkScanControlCard(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .shadow(12.dp, CircleShape),
+                    .height(56.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (status == RunStatus.RUNNING)
-                        Color(0xFFEF4444) else Color(0xFF8B5CF6),
-                    contentColor = Color.White
-                )
+                        colors.error else colors.tertiary,
+                    contentColor = colors.onPrimary
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
             ) {
                 if (status == RunStatus.RUNNING) {
                     Icon(Icons.Default.Stop, contentDescription = null)
@@ -264,6 +257,8 @@ private fun StatCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
         modifier = modifier.height(90.dp),
         shape = RoundedCornerShape(16.dp),
@@ -284,8 +279,8 @@ private fun StatCard(
             ) {
                 Text(
                     text = label,
-                    fontSize = 12.sp,
-                    color = Color(0xFF94A3B8),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
                 Icon(
@@ -299,7 +294,7 @@ private fun StatCard(
                 text = value,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = colors.onSurface
             )
         }
     }
@@ -307,10 +302,12 @@ private fun StatCard(
 
 @Composable
 private fun ErrorCard(error: String) {
+    val colors = MaterialTheme.colorScheme
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFEF4444).copy(alpha = 0.2f)
+            containerColor = colors.errorContainer
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -322,11 +319,11 @@ private fun ErrorCard(error: String) {
             Icon(
                 Icons.Default.Error,
                 contentDescription = null,
-                tint = Color(0xFFEF4444)
+                tint = colors.error
             )
             Text(
                 text = error,
-                color = Color(0xFFFECDD3),
+                color = colors.onErrorContainer,
                 fontSize = 14.sp
             )
         }
@@ -335,6 +332,8 @@ private fun ErrorCard(error: String) {
 
 @Composable
 private fun EmptyDevicesState() {
+    val colors = MaterialTheme.colorScheme
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -347,18 +346,18 @@ private fun EmptyDevicesState() {
                 Icons.Default.DevicesOther,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
-                tint = Color(0xFF475569)
+                tint = colors.outline
             )
             Text(
                 "Nenhum dispositivo encontrado",
                 fontSize = 14.sp,
-                color = Color(0xFF94A3B8),
+                color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             Text(
                 "Clique em \"Iniciar Scan\" para buscar\ndispositivos na rede local",
                 fontSize = 12.sp,
-                color = Color(0xFF64748B),
+                color = colors.onSurfaceVariant.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
             )
         }
@@ -367,6 +366,8 @@ private fun EmptyDevicesState() {
 
 @Composable
 private fun ScanningState() {
+    val colors = MaterialTheme.colorScheme
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -377,12 +378,12 @@ private fun ScanningState() {
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(48.dp),
-                color = Color(0xFF3B82F6)
+                color = colors.primary
             )
             Text(
                 "Procurando dispositivos...",
                 fontSize = 14.sp,
-                color = Color(0xFF94A3B8),
+                color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
         }
@@ -409,6 +410,8 @@ private fun DeviceCard(
     device: NetworkDevice,
     onClick: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+
     val deviceColor = when (device.deviceType) {
         DeviceType.ROUTER -> Color(0xFF3B82F6)
         DeviceType.COMPUTER -> Color(0xFF8B5CF6)
@@ -470,7 +473,7 @@ private fun DeviceCard(
                     text = if (device.hostname != "Unknown") device.hostname else device.ipAddress,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -481,7 +484,7 @@ private fun DeviceCard(
                         text = device.ipAddress,
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF94A3B8)
+                        color = colors.onSurfaceVariant
                     )
                 }
 
@@ -490,7 +493,7 @@ private fun DeviceCard(
                     Text(
                         text = device.vendor,
                         fontSize = 11.sp,
-                        color = Color(0xFF64748B)
+                        color = colors.onSurfaceVariant.copy(alpha = 0.8f)
                     )
                 }
 
@@ -500,7 +503,7 @@ private fun DeviceCard(
                         text = "Portas: ${device.openPorts.joinToString(", ")}",
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF475569)
+                        color = colors.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -515,9 +518,9 @@ private fun DeviceCard(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = when {
-                        device.responseTime < 50 -> Color(0xFF10B981)
-                        device.responseTime < 100 -> Color(0xFFF59E0B)
-                        else -> Color(0xFFEF4444)
+                        device.responseTime < 50 -> colors.secondary
+                        device.responseTime < 100 -> colors.tertiary
+                        else -> colors.error
                     }
                 )
 
@@ -529,12 +532,12 @@ private fun DeviceCard(
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .background(Color(0xFF10B981), CircleShape)
+                            .background(colors.secondary, CircleShape)
                     )
                     Text(
                         text = "Online",
                         fontSize = 10.sp,
-                        color = Color(0xFF10B981)
+                        color = colors.secondary
                     )
                 }
             }
