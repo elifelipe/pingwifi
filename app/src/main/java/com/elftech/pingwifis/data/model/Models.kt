@@ -36,6 +36,12 @@ enum class TestPhase {
     IDLE, PING, DOWNLOAD, UPLOAD, COMPLETED
 }
 
+enum class ServerSelectionMode {
+    NEARBY,
+    CDN,
+    HYBRID
+}
+
 data class ExtendedSpeedTestState(
     val status: RunStatus = RunStatus.IDLE,
     val currentPhase: TestPhase = TestPhase.IDLE,

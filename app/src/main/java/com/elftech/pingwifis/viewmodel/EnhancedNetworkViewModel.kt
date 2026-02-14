@@ -19,6 +19,7 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val speedRunner = ImprovedSpeedTestRunner(viewModelScope)
     private val traceRunner = TracerouteRunner(viewModelScope)
     private val pingRunner = PingTestRunner(viewModelScope)
+    private val downPingRunner = DownPingRunner(viewModelScope)
 
     private val networkScanner = NetworkScanner(viewModelScope)
 
@@ -40,6 +41,9 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
     private val _ping = MutableStateFlow(PingTestState())
     val ping: StateFlow<PingTestState> = _ping.asStateFlow()
 
+    private val _downPing = MutableStateFlow(DownPingState())
+    val downPing: StateFlow<DownPingState> = _downPing.asStateFlow()
+
     private val _serverDetails = MutableStateFlow<SpeedTestServer?>(null)
     val serverDetails: StateFlow<SpeedTestServer?> = _serverDetails.asStateFlow()
 
@@ -48,6 +52,9 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _availableServers = MutableStateFlow<List<SpeedTestServer>>(emptyList())
     val availableServers: StateFlow<List<SpeedTestServer>> = _availableServers.asStateFlow()
+
+    private var nearbyServersCache: List<SpeedTestServer> = emptyList()
+    private var cdnServersCache: List<SpeedTestServer> = emptyList()
 
     private val _isLoadingServers = MutableStateFlow(false)
     val isLoadingServers: StateFlow<Boolean> = _isLoadingServers.asStateFlow()
@@ -195,10 +202,20 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
                 _clientInfo.value = info
                 delay(200)
 
-                _testMessage.value = "Procurando servidores próximos..."
-                val servers = ipInfoService.getNearbyServers(info)
-                _availableServers.value = servers
-                if (servers.isEmpty()) {
+                _testMessage.value = "Buscando provedores próximos e CDNs..."
+                val allServers = ipInfoService.getNearbyServers(info)
+
+                nearbyServersCache = allServers.filterNot { ipInfoService.isCdnServer(it) }
+                cdnServersCache = allServers.filter { ipInfoService.isCdnServer(it) }
+                _availableServers.value = if (nearbyServersCache.isNotEmpty()) nearbyServersCache else cdnServersCache
+                _testMessage.value = "Servidores: ${nearbyServersCache.size} próximos, ${cdnServersCache.size} CDN"
+                Log.i("EnhancedNetVM", "Servidores encontrados -> proximos=${nearbyServersCache.size}, cdn=${cdnServersCache.size}, total=${_availableServers.value.size}")
+
+                if (nearbyServersCache.isEmpty() && cdnServersCache.isNotEmpty()) {
+                    _testMessage.value = "Não encontramos provedores próximos agora. Exibindo CDN como alternativa."
+                }
+
+                if (_availableServers.value.isEmpty()) {
                     throw Exception("Nenhum servidor de teste encontrado.")
                 }
                 delay(200)
@@ -371,6 +388,7 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
         speedRunner.stop()
         traceRunner.stop()
         pingRunner.stop()
+        downPingRunner.stop()
     }
 
     fun runTraceroute(host: String, maxHops: Int = 30) {
@@ -435,6 +453,71 @@ class EnhancedNetworkViewModel(app: Application) : AndroidViewModel(app) {
         pingRunner.stop()
         if (_ping.value.status == RunStatus.RUNNING) {
             _ping.value = _ping.value.copy(status = RunStatus.IDLE)
+        }
+    }
+
+    fun updateDownPingTarget(target: String) {
+        _downPing.value = _downPing.value.copy(target = target)
+    }
+
+    fun startDownPing(target: String, pingCount: Int = 6) {
+        if (!_connectionStatus.value.isConnected) {
+            _downPing.value = _downPing.value.copy(
+                status = RunStatus.ERROR,
+                error = "Sem conexão à internet"
+            )
+            return
+        }
+
+        if (target.isBlank()) {
+            _downPing.value = _downPing.value.copy(
+                status = RunStatus.ERROR,
+                error = "Digite um IP ou domínio válido"
+            )
+            return
+        }
+
+        _downPing.value = DownPingState(
+            status = RunStatus.RUNNING,
+            target = target,
+            progressMessage = "Preparando diagnóstico..."
+        )
+
+        downPingRunner.run(
+            target = target,
+            pingCount = pingCount.coerceIn(3, 20),
+            onProgress = { message ->
+                _downPing.value = _downPing.value.copy(progressMessage = message)
+            },
+            onPingProgress = { result ->
+                _downPing.value = _downPing.value.copy(
+                    pingResults = _downPing.value.pingResults + result
+                )
+            },
+            onComplete = { report ->
+                _downPing.value = _downPing.value.copy(
+                    status = RunStatus.DONE,
+                    progressMessage = "Diagnóstico concluído",
+                    report = report
+                )
+            },
+            onError = { error ->
+                _downPing.value = _downPing.value.copy(
+                    status = RunStatus.ERROR,
+                    progressMessage = "Falha no diagnóstico",
+                    error = error
+                )
+            }
+        )
+    }
+
+    fun stopDownPing() {
+        downPingRunner.stop()
+        if (_downPing.value.status == RunStatus.RUNNING) {
+            _downPing.value = _downPing.value.copy(
+                status = RunStatus.IDLE,
+                progressMessage = "Diagnóstico interrompido"
+            )
         }
     }
 

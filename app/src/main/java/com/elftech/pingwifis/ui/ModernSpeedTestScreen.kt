@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -45,17 +46,21 @@ fun ModernSpeedTestScreen(
     pingMs: Int,
     jitterMs: Int,
     isLoadingServers: Boolean,
+    availableServers: List<SpeedTestServer>,
     downloadSpeedSamples: List<Double>,
     uploadSpeedSamples: List<Double>,
-    onStartTest: () -> Unit
+    onStartTest: () -> Unit,
+    onSelectServer: (SpeedTestServer) -> Unit
 ) {
     val scrollState = rememberScrollState()
+    var hasAutoStarted by rememberSaveable { mutableStateOf(false) }
 
-    // Dispara o teste automaticamente QUANDO o servidor for encontrado
-    LaunchedEffect(serverDetails, status) {
-        if (serverDetails != null && status == RunStatus.IDLE) {
+    // Dispara automaticamente apenas na primeira descoberta de servidor.
+    LaunchedEffect(serverDetails, status, hasAutoStarted) {
+        if (!hasAutoStarted && serverDetails != null && status == RunStatus.IDLE) {
             delay(800)
             onStartTest()
+            hasAutoStarted = true
         }
     }
 
@@ -104,6 +109,13 @@ fun ModernSpeedTestScreen(
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
+        ServerSelectionCard(
+            availableServers = availableServers,
+            selectedServer = serverDetails,
+            isLoadingServers = isLoadingServers,
+            onSelectServer = onSelectServer
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         // Connection card não precisa mais do "onChangeServer"
         ModernConnectionCard(
             clientInfo = clientInfo,
@@ -111,6 +123,77 @@ fun ModernSpeedTestScreen(
             wifiData = wifiData
         )
         Spacer(modifier = Modifier.height(80.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ServerSelectionCard(
+    availableServers: List<SpeedTestServer>,
+    selectedServer: SpeedTestServer?,
+    isLoadingServers: Boolean,
+    onSelectServer: (SpeedTestServer) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceColorAtElevation(2.dp)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "Servidor de teste",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { if (!isLoadingServers && availableServers.isNotEmpty()) expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = selectedServer?.let { "${it.name} - ${it.city}" } ?: "Seleção automática",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    label = { Text("Servidor ativo") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    singleLine = true
+                )
+
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    availableServers.forEach { server ->
+                        DropdownMenuItem(
+                            text = { Text("${server.name} - ${server.city}") },
+                            onClick = {
+                                onSelectServer(server)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (isLoadingServers) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                Text(
+                    text = "${availableServers.size} servidores disponíveis",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
