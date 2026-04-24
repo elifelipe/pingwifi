@@ -53,4 +53,20 @@
     <string name="km">km</string>
     <string name="selected">Selecionado</string>
     <string name="close">Fechar</string>
+
+    <!-- Widget -->
+    <string name="widget_title">PingWiFi</string>
+    <string name="widget_subtitle">Monitor de velocidade</string>
+    <string name="widget_description">Mostra o ultimo teste de velocidade na tela inicial</string>
+    <string name="widget_refresh">Atualizar</string>
+    <string name="widget_open_app">Abrir app</string>
+    <string name="widget_no_data">Sem teste salvo</string>
+    <string name="widget_run_test_hint">Abra o app e rode um teste</string>
+    <string name="widget_last_result">Ultimo resultado</string>
+    <string name="widget_unknown_server">Servidor nao informado</string>
+    <string name="widget_updated_prefix">Atualizado %1$s</string>
+    <string name="widget_just_now">agora</string>
+    <string name="widget_minutes_ago">%1$d min atras</string>
+    <string name="widget_hours_ago">%1$d h atras</string>
+    <string name="widget_days_ago">%1$d d atras</string>
 </resources>

@@ -2,6 +2,7 @@ package com.elftech.pingwifis.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -27,13 +30,17 @@ import com.elftech.pingwifis.data.DeviceType
 import com.elftech.pingwifis.data.NetworkDevice
 import com.elftech.pingwifis.data.model.NetworkScanState
 import com.elftech.pingwifis.data.model.RunStatus
+import com.elftech.pingwifis.data.model.WifiChannelData
+import com.elftech.pingwifis.data.model.WifiChannelState
 import androidx.compose.material3.surfaceColorAtElevation
 
 @Composable
 fun NetworkScannerScreen(
     scanState: NetworkScanState,
+    channelState: WifiChannelState,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
+    onScanChannels: () -> Unit,
     onDeviceClick: (NetworkDevice) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -46,6 +53,9 @@ fun NetworkScannerScreen(
     ) {
         // Header
         NetworkScanHeader()
+
+        // WiFi Channel Analysis
+        WifiChannelCard(state = channelState, onScan = onScanChannels)
 
         // Control Card
         NetworkScanControlCard(
@@ -119,6 +129,166 @@ fun NetworkScannerScreen(
                             onClick = onDeviceClick
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WifiChannelCard(state: WifiChannelState, onScan: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(2.dp)),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Wifi, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+                    Text("Análise de Canais Wi-Fi", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                }
+                }
+                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = colors.onSurfaceVariant)
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = onScan,
+                        enabled = state.status != RunStatus.RUNNING,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (state.status == RunStatus.RUNNING) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Analisando…")
+                        } else {
+                            Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Escanear Canais")
+                        }
+                    }
+
+                    state.error?.let {
+                        Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    if (state.channels.isNotEmpty()) {
+                        val bands = state.channels.map { it.band }.distinct().sorted()
+                        bands.forEach { band ->
+                            val channelsInBand = state.channels.filter { it.band == band }
+                            ChannelBandSection(band = band, channels = channelsInBand)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelBandSection(band: String, channels: List<WifiChannelData>) {
+    val colors = MaterialTheme.colorScheme
+    val maxNetworks = channels.maxOf { it.networkSsids.size }.coerceAtLeast(1)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Surface(shape = RoundedCornerShape(4.dp), color = colors.primaryContainer) {
+                Text(
+                    band,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onPrimaryContainer
+                )
+            }
+            Text(
+                "${channels.size} canais em uso",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant
+            )
+        }
+
+        channels.forEach { ch ->
+            val fraction = ch.networkSsids.size.toFloat() / maxNetworks
+            val congestionColor = when {
+                fraction <= 0.33f -> Color(0xFF4CAF50)
+                fraction <= 0.66f -> Color(0xFFFF9800)
+                else -> Color(0xFFF44336)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Ch ${ch.channel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (ch.currentChannel) FontWeight.Bold else FontWeight.Normal,
+                    color = if (ch.currentChannel) colors.primary else colors.onSurfaceVariant,
+                    modifier = Modifier.width(44.dp)
+                )
+
+                val animFraction by animateFloatAsState(
+                    targetValue = fraction,
+                    animationSpec = tween(600, easing = FastOutSlowInEasing),
+                    label = "ch_bar_${ch.channel}"
+                )
+
+                Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(10.dp)
+                ) {
+                    drawRoundRect(
+                        color = congestionColor.copy(alpha = 0.15f),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(5f)
+                    )
+                    drawRoundRect(
+                        color = congestionColor,
+                        size = Size(size.width * animFraction, size.height),
+                        cornerRadius = CornerRadius(5f)
+                    )
+                    if (ch.currentChannel) {
+                        drawLine(
+                            color = colors.primary,
+                            start = androidx.compose.ui.geometry.Offset(0f, size.height / 2),
+                            end = androidx.compose.ui.geometry.Offset(size.width * animFraction, size.height / 2),
+                            strokeWidth = 2f
+                        )
+                    }
+                }
+
+                Text(
+                    "${ch.networkSsids.size} rede${if (ch.networkSsids.size != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = congestionColor,
+                    modifier = Modifier.width(52.dp),
+                    textAlign = TextAlign.End
+                )
+
+                if (ch.currentChannel) {
+                    Icon(
+                        Icons.Default.MyLocation,
+                        contentDescription = "Seu canal",
+                        tint = colors.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }

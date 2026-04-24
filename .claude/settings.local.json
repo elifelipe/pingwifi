@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc *)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(grep -n \"material:material\" gradle/libs.versions.toml app/build.gradle.kts)",
+      "Bash(grep -n \"extended\" gradle/libs.versions.toml app/build.gradle.kts)",
+      "Bash(grep -v \"//\")",
+      "Bash(grep -v \"^Binary\\\\|//\")"
+    ]
+  }
+}

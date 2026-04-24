@@ -1,48 +1,26 @@
 package com.elftech.pingwifis.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.animation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.elftech.pingwifis.data.model.DownPingState
 import com.elftech.pingwifis.data.model.HttpCheckResult
 import com.elftech.pingwifis.data.model.RunStatus
+import androidx.compose.material3.surfaceColorAtElevation
 
 @Composable
 fun DownPingDiagnosisScreen(
@@ -51,155 +29,385 @@ fun DownPingDiagnosisScreen(
     onStart: (String, Int) -> Unit,
     onStop: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
     var pingCountText by remember { mutableStateOf("6") }
     val running = state.status == RunStatus.RUNNING
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Header
         item {
-            Text(
-                text = "Diagnóstico de Rede",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = state.target,
-                onValueChange = onTargetChange,
-                label = { Text("IP ou domínio") },
-                singleLine = true,
-                enabled = !running,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = pingCountText,
-                onValueChange = { value ->
-                    if (value.all(Char::isDigit)) pingCountText = value
-                },
-                label = { Text("Quantidade de ping (3-20)") },
-                singleLine = true,
-                enabled = !running,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    if (running) {
-                        onStop()
-                    } else {
-                        onStart(state.target, pingCountText.toIntOrNull() ?: 6)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (running) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
             ) {
-                if (running) {
-                    androidx.compose.material3.Icon(Icons.Default.Stop, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Parar diagnóstico")
-                } else {
-                    androidx.compose.material3.Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Executar diagnóstico")
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "Diagnóstico de Rede",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onBackground
+                )
+            }
+        }
+
+        // Input card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(2.dp)),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = state.target,
+                        onValueChange = onTargetChange,
+                        label = { Text("IP ou domínio") },
+                        singleLine = true,
+                        enabled = !running,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = colors.onSurface,
+                            unfocusedTextColor = colors.onSurface,
+                            disabledTextColor = colors.onSurfaceVariant,
+                            focusedBorderColor = colors.primary,
+                            unfocusedBorderColor = colors.outline,
+                            focusedLabelColor = colors.primary,
+                            unfocusedLabelColor = colors.onSurfaceVariant,
+                            cursorColor = colors.primary
+                        ),
+                        leadingIcon = {
+                            Icon(Icons.Default.Language, contentDescription = null, tint = colors.primary)
+                        }
+                    )
+
+                    OutlinedTextField(
+                        value = pingCountText,
+                        onValueChange = { if (it.all(Char::isDigit)) pingCountText = it },
+                        label = { Text("Quantidade de pings (3–20)") },
+                        singleLine = true,
+                        enabled = !running,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = colors.onSurface,
+                            unfocusedTextColor = colors.onSurface,
+                            disabledTextColor = colors.onSurfaceVariant,
+                            focusedBorderColor = colors.primary,
+                            unfocusedBorderColor = colors.outline,
+                            focusedLabelColor = colors.primary,
+                            unfocusedLabelColor = colors.onSurfaceVariant,
+                            cursorColor = colors.primary
+                        ),
+                        leadingIcon = {
+                            Icon(Icons.Default.Numbers, contentDescription = null, tint = colors.primary)
+                        }
+                    )
+
+                    Button(
+                        onClick = {
+                            if (running) onStop()
+                            else onStart(state.target, pingCountText.toIntOrNull() ?: 6)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (running) colors.error else colors.primary,
+                            contentColor = if (running) colors.onError else colors.onPrimary
+                        )
+                    ) {
+                        Icon(
+                            if (running) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (running) "Parar diagnóstico" else "Executar diagnóstico",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
 
+        // Progress card
         item {
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(2.dp)),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (running) {
-                        CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = colors.primary
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = colors.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                    Text(state.progressMessage)
+                    Text(
+                        text = state.progressMessage,
+                        color = colors.onSurface,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
 
+        // Error
         state.error?.let { errorMsg ->
             item {
-                OutlinedCard(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.errorContainer)
                 ) {
-                    Text(
-                        text = "Erro: $errorMsg",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = colors.onErrorContainer)
+                        Text(
+                            text = errorMsg,
+                            color = colors.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }
 
+        // Report summary
         state.report?.let { report ->
             item {
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Destino: ${report.normalizedHost}", fontWeight = FontWeight.SemiBold)
-                        Text("IPs: ${report.resolvedIps.joinToString()}")
-                        Text("Pacotes perdidos: ${report.pingSummary.packetLossPercent}%")
-                        Text("Latência média: ${report.pingSummary.avgLatencyMs} ms")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(2.dp)),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Resumo",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface
+                        )
+                        HorizontalDivider(color = colors.outlineVariant)
+                        DiagInfoRow("Destino", report.normalizedHost)
+                        DiagInfoRow("IPs resolvidos", report.resolvedIps.joinToString())
+                        DiagInfoRow(
+                            "Pacotes perdidos",
+                            "${report.pingSummary.packetLossPercent}%",
+                            valueColor = if (report.pingSummary.packetLossPercent > 0) colors.error else Color(0xFF4CAF50)
+                        )
+                        DiagInfoRow("Latência média", "${report.pingSummary.avgLatencyMs} ms")
                     }
                 }
             }
 
-            item {
-                Text("HTTP/HTTPS", style = MaterialTheme.typography.titleMedium)
-            }
-            items(report.httpChecks) { check ->
-                HttpCheckRow(check)
+            if (report.httpChecks.isNotEmpty()) {
+                item {
+                    Text(
+                        "HTTP / HTTPS",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onBackground,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                items(report.httpChecks) { check ->
+                    HttpCheckCard(check)
+                }
             }
 
-            item {
-                Text("Portas TCP", style = MaterialTheme.typography.titleMedium)
-            }
-            items(report.tcpPortResults.entries.toList()) { entry ->
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            if (report.tcpPortResults.isNotEmpty()) {
+                item {
                     Text(
-                        text = "Porta ${entry.key}: ${if (entry.value) "aberta" else "fechada/sem resposta"}",
-                        modifier = Modifier.padding(12.dp)
+                        "Portas TCP",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onBackground,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
+                }
+                items(report.tcpPortResults.entries.toList()) { entry ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (entry.value)
+                                Color(0xFF4CAF50).copy(alpha = 0.12f)
+                            else
+                                colors.errorContainer.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                if (entry.value) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (entry.value) Color(0xFF4CAF50) else colors.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Porta ${entry.key}: ${if (entry.value) "aberta" else "fechada / sem resposta"}",
+                                color = colors.onSurface,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                 }
             }
         }
 
+        // Ping events
         if (state.pingResults.isNotEmpty()) {
             item {
-                Text("Eventos do ping", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Eventos do ping",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onBackground,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
             items(state.pingResults.takeLast(30)) { result ->
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = colors.surfaceColorAtElevation(3.dp)
+                    )
+                ) {
                     Text(
                         text = result.message,
                         fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(12.dp)
+                        fontSize = 12.sp,
+                        color = colors.onSurface,
+                        modifier = Modifier.padding(10.dp)
                     )
                 }
             }
         }
+
+        item { Spacer(Modifier.height(60.dp)) }
     }
 }
 
 @Composable
-private fun HttpCheckRow(check: HttpCheckResult) {
-    val color = if (check.ok) Color(0xFF1B5E20) else MaterialTheme.colorScheme.error
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(check.url, fontWeight = FontWeight.SemiBold)
-            Text("Status: ${check.statusCode?.toString() ?: "-"}", color = color)
-            Text("Tempo: ${check.latencyMs} ms")
+private fun DiagInfoRow(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
+            modifier = Modifier.weight(0.4f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = valueColor,
+            modifier = Modifier.weight(0.6f)
+        )
+    }
+}
+
+@Composable
+private fun HttpCheckCard(check: HttpCheckResult) {
+    val colors = MaterialTheme.colorScheme
+    val okColor = Color(0xFF4CAF50)
+    val statusColor = if (check.ok) okColor else colors.error
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = statusColor.copy(alpha = 0.10f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    if (check.ok) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = null,
+                    tint = statusColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = check.url,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onSurface,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Text(
+                text = "Status: ${check.statusCode?.toString() ?: "–"}",
+                color = statusColor,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Tempo: ${check.latencyMs} ms",
+                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
             if (check.message.isNotBlank()) {
-                Text(check.message)
+                Text(
+                    text = check.message,
+                    color = colors.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

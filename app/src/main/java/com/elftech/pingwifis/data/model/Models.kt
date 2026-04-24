@@ -1,5 +1,54 @@
 package com.elftech.pingwifis.data.model
 
+data class LastTestResult(
+    val downloadMbps: Double,
+    val uploadMbps: Double,
+    val pingMs: Int,
+    val jitterMs: Int,
+    val serverName: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class VpnInfo(
+    val isActive: Boolean,
+    val interfaceName: String? = null
+)
+
+data class DnsServer(val name: String, val address: String)
+
+data class DnsResult(
+    val server: DnsServer,
+    val latencyMs: Long = -1L,
+    val resolved: Boolean = false,
+    val resolvedIp: String? = null,
+    val error: String? = null
+)
+
+data class DnsTestState(
+    val status: RunStatus = RunStatus.IDLE,
+    val results: List<DnsResult> = emptyList(),
+    val target: String = "google.com"
+)
+
+data class WifiChannelData(
+    val channel: Int,
+    val frequencyMhz: Int,
+    val band: String,
+    val networkSsids: List<String>,
+    val currentChannel: Boolean = false
+)
+
+data class WifiChannelState(
+    val status: RunStatus = RunStatus.IDLE,
+    val channels: List<WifiChannelData> = emptyList(),
+    val error: String? = null
+)
+
+data class QualitySettings(
+    val minDownloadMbps: Float = 10f,
+    val notificationsEnabled: Boolean = false
+)
+
 data class ClientInfo(
     val ipAddress: String,
     val city: String,

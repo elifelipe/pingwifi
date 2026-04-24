@@ -37,6 +37,11 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
     val clientInfo by vm.clientInfo.collectAsState()
     val availableServers by vm.availableServers.collectAsState()
     val isLoadingServers by vm.isLoadingServers.collectAsState()
+    val lastTestResult by vm.lastTestResult.collectAsState()
+    val vpnInfo by vm.vpnInfo.collectAsState()
+    val qualitySettings by vm.qualitySettings.collectAsState()
+    val dnsTestState by vm.dnsTestState.collectAsState()
+    val wifiChannelState by vm.wifiChannelState.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -46,13 +51,16 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
         delay(300)
         val perms = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
-            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            if (Build.VERSION.SDK_INT >= 33) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }.toTypedArray()
         permissionLauncher.launch(perms)
     }
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Velocidade", "Ping", "Rede", "Diagnóstico")
+    val tabs = listOf("Velocidade", "Ping", "Rede", "DNS", "Diagnóstico")
 
     AppBackground(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -88,8 +96,12 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                             availableServers = availableServers,
                             downloadSpeedSamples = extendedSpeed.downloadSpeedSamples,
                             uploadSpeedSamples = extendedSpeed.uploadSpeedSamples,
+                            lastTestResult = lastTestResult,
+                            vpnInfo = vpnInfo,
+                            qualitySettings = qualitySettings,
                             onStartTest = { vm.startSpeedTest() },
-                            onSelectServer = { vm.changeServer(it) }
+                            onSelectServer = { vm.changeServer(it) },
+                            onUpdateQualitySettings = { vm.updateQualitySettings(it) }
                         )
                         1 -> ModernPingTestScreen(
                             pingHost = ping.host,
@@ -103,15 +115,21 @@ fun UpdatedNetTesterScreen(vm: EnhancedNetworkViewModel) {
                         )
                         2 -> NetworkScannerScreen(
                             scanState = vm.networkScan.collectAsState().value,
+                            channelState = wifiChannelState,
                             onStartScan = { vm.startNetworkScan() },
                             onStopScan = { vm.stopNetworkScan() },
+                            onScanChannels = { vm.scanWifiChannels() },
                             onDeviceClick = { device ->
-                                // Atualiza o ping host e vai para aba de ping
                                 vm.updatePingHost(device.ipAddress)
                                 selectedTab = 1
                             }
                         )
-                        3 -> DownPingDiagnosisScreen(
+                        3 -> DnsTestScreen(
+                            state = dnsTestState,
+                            onTargetChange = { vm.updateDnsTarget(it) },
+                            onStartTest = { vm.startDnsTest(it) }
+                        )
+                        4 -> DownPingDiagnosisScreen(
                             state = downPing,
                             onTargetChange = { vm.updateDownPingTarget(it) },
                             onStart = { target, pingCount -> vm.startDownPing(target, pingCount) },
@@ -168,22 +186,23 @@ private fun AppTabRow(
 
     Surface(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
             .fillMaxWidth(),
         shape = RoundedCornerShape(999.dp),
         tonalElevation = 2.dp,
         color = colors.surfaceColorAtElevation(2.dp)
     ) {
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.Transparent,
+            edgePadding = 8.dp,
             divider = {},
             indicator = { tabPositions ->
                 val currentTab = tabPositions[selectedTab]
                 Box(
                     modifier = Modifier
                         .tabIndicatorOffset(currentTab)
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
                         .fillMaxHeight()
                         .background(
                             color = colors.primary.copy(alpha = 0.2f),
@@ -203,7 +222,8 @@ private fun AppTabRow(
                         Text(
                             title,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (selected) colors.primary else colors.onSurfaceVariant
                         )
                     },
                     icon = {
@@ -211,7 +231,8 @@ private fun AppTabRow(
                             0 -> Icon(Icons.Filled.Speed, contentDescription = title)
                             1 -> Icon(Icons.Filled.NetworkPing, contentDescription = title)
                             2 -> Icon(Icons.Filled.Devices, contentDescription = title)
-                            3 -> Icon(Icons.Filled.Search, contentDescription = title)
+                            3 -> Icon(Icons.Filled.Dns, contentDescription = title)
+                            4 -> Icon(Icons.Filled.Search, contentDescription = title)
                         }
                     }
                 )
